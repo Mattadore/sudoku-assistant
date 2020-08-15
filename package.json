@@ -8,15 +8,22 @@
     "@emotion/styled": "^10.0.27",
     "@types/node": "^14.0.27",
     "@types/react": "^16.9.46",
+    "@types/react-color": "^3.0.4",
     "@types/react-dom": "^16.9.8",
+    "firebase-tools": "^8.7.0",
     "gatsby": "^2.24.47",
     "gatsby-link": "^2.4.13",
     "gatsby-plugin-emotion": "^4.3.10",
     "gatsby-plugin-react-helmet": "^3.3.10",
     "gatsby-plugin-typescript": "^2.4.18",
+    "global": "^4.4.0",
+    "immer": "^7.0.7",
     "react": "^16.13.1",
+    "react-color": "^2.18.1",
     "react-dom": "^16.13.1",
-    "react-helmet": "^6.1.0"
+    "react-helmet": "^6.1.0",
+    "semantic-ui-css": "^2.4.1",
+    "semantic-ui-react": "^1.2.0"
   },
   "keywords": [
     "gatsby, typescript"
