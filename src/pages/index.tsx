@@ -149,6 +149,87 @@ const GridCell: React.FC<GridCellProps> = ({
     </GridCellStyle>
   )
 }
+function getPixel(imgData: ImageData, index: number) {
+  return imgData.data.slice(index * 4, index * 4 + 4)
+}
+
+const preprocessImage = (imageData: ImageData) => {
+  const canvas: HTMLCanvasElement = document.getElementById(
+    'sudoku-image',
+  ) as HTMLCanvasElement
+
+  const rows = Array(imageData.height).fill(0)
+  const columns = Array(imageData.width).fill(0)
+  let trimLeft = 0,
+    trimRight = 0,
+    trimUp = 0,
+    trimDown = 0
+
+  for (trimUp = 0; trimUp < rows.length; ++trimUp) {
+    if (rows[trimUp] > 0) {
+      break
+    }
+  }
+
+  for (trimDown = rows.length - 1; trimDown > 0; --trimDown) {
+    if (rows[trimDown] > 0) {
+      break
+    }
+  }
+
+  for (trimLeft = 0; trimLeft < columns.length; ++trimLeft) {
+    if (columns[trimLeft] > 0) {
+      break
+    }
+  }
+
+  for (trimRight = columns.length - 1; trimRight > 0; --trimRight) {
+    if (columns[trimRight] > 0) {
+      break
+    }
+  }
+
+  for (let row = 0; row < rows.length; ++row) {}
+  ;[].concat()
+
+  let newData: Uint8ClampedArray = new Uint8ClampedArray([...imageData.data])
+  console.log(newData)
+
+  for (let index = 0; index < imageData.data.length / 4; ++index) {
+    const x = index % imageData.width
+    const y = Math.floor(index / imageData.width)
+    const pixelData = getPixel(imageData, index)
+    const intensity = (pixelData[0] + pixelData[1] + pixelData[2]) / 3
+    if (intensity < 20) {
+      //is blak
+      columns[x] = ++columns[x]
+      rows[y] = ++rows[y]
+    } else if (intensity > 245) {
+      //is whit
+      newData[index * 4 + 3] = 0
+    }
+  }
+
+  console.log('TRIM:', trimLeft, trimRight, trimUp, trimDown)
+
+  const newImageData = new ImageData(newData, imageData.width)
+  canvas.height = newImageData.height
+  canvas.width = newImageData.width
+  canvas
+    .getContext('2d')
+    .putImageData(
+      newImageData,
+      0,
+      0,
+      trimLeft,
+      trimUp,
+      trimRight - trimLeft,
+      trimDown - trimUp,
+    )
+
+  console.log(newImageData.width, newImageData.height)
+  return [canvas.width, canvas.height]
+}
 
 export default (props: IndexPageProps, context: any) => {
   const [selectedIndex, setSelectedIndex] = useState(null)
@@ -163,31 +244,10 @@ export default (props: IndexPageProps, context: any) => {
         color: '#ffffff',
       })),
   ])
-  // const [cells, setCells] = useState<Array<CellData>>(
-  //   Array(81)
-  //     .fill(1)
-  //     .map((value) => ({
-  //       number: null,
-  //       center: [],
-  //       corner: [],
-  //       color: '#ffffff',
-  //     })),
-  // )
-  // useEffect(() => {
-  //   localStorage.states = [
-  //     Array(81)
-  //       .fill(1)
-  //       .map((value) => ({
-  //         number: null,
-  //         center: [],
-  //         corner: [],
-  //         color: '#ffffff',
-  //       })),
-  //   ]
-  // }, [])
 
   const [boardStateIndex, setBoardStateIndex] = useState(0)
 
+  const [image, setImage] = useState(null)
   // const cells = localStorage.states[boardStateIndex]
   const cells = states.current[boardStateIndex]
 
@@ -219,7 +279,7 @@ export default (props: IndexPageProps, context: any) => {
 
       switch (event.key) {
         case 'y':
-          if (boardStateIndex < states.current.length) {
+          if (boardStateIndex < states.current.length - 1) {
             setBoardStateIndex(boardStateIndex + 1)
           }
           break
@@ -257,6 +317,35 @@ export default (props: IndexPageProps, context: any) => {
     }
   }, [selectedIndex, boardStateIndex])
 
+  const fileLoad: (event: React.ChangeEvent<HTMLInputElement>) => void = (
+    event,
+  ) => {
+    if (event.target.files.length) {
+      const file = event.target.files[0]
+      const canvas = document.getElementById(
+        'sudoku-image',
+      ) as HTMLCanvasElement
+      const image = new Image()
+      const url = URL.createObjectURL(file)
+      image.src = url
+
+      image.onload = function () {
+        URL.revokeObjectURL(url)
+        const context = canvas.getContext('2d')
+        canvas.width = image.width
+        canvas.height = image.height
+        context.drawImage(image, 0, 0)
+        const imageData = context.getImageData(
+          0,
+          0,
+          canvas.width,
+          canvas.height,
+        )
+        preprocessImage(imageData)
+      }
+    }
+  }
+
   return (
     <div>
       <CompactPicker
@@ -268,6 +357,8 @@ export default (props: IndexPageProps, context: any) => {
           })
         }}
       />
+      <canvas width={500} height={500} id="sudoku-image" />
+      <input type="file" id="upload-button" onChange={fileLoad} />
       <GridContainer>
         <GridBackground>
           {states.current[boardStateIndex] && (
