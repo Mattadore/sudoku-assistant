@@ -195,8 +195,10 @@ export default (props: IndexPageProps, context: any) => {
     const out = produce(cells, (cellsDraft: Array<CellData>) => {
       update(cellsDraft)
     })
+    states.current.splice(boardStateIndex + 1, states.current.length)
     states.current.push(out)
-    setBoardStateIndex((index) => index + 1)
+
+    setBoardStateIndex(boardStateIndex + 1)
   }
 
   useEffect(() => {
@@ -216,6 +218,16 @@ export default (props: IndexPageProps, context: any) => {
       }
 
       switch (event.key) {
+        case 'y':
+          if (boardStateIndex < states.current.length) {
+            setBoardStateIndex(boardStateIndex + 1)
+          }
+          break
+        case 'z':
+          if (boardStateIndex > 0) {
+            setBoardStateIndex(boardStateIndex - 1)
+          }
+          break
         case 'ArrowLeft':
           if (selectedIndex % 9 > 0) {
             setSelectedIndex(selectedIndex - 1)
@@ -243,7 +255,7 @@ export default (props: IndexPageProps, context: any) => {
     return () => {
       document.removeEventListener('keydown', keyCallback)
     }
-  }, [selectedIndex])
+  }, [selectedIndex, boardStateIndex])
 
   return (
     <div>
