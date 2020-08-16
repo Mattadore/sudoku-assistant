@@ -165,6 +165,26 @@ const preprocessImage = (imageData: ImageData) => {
     trimUp = 0,
     trimDown = 0
 
+  let newData: Uint8ClampedArray = new Uint8ClampedArray([...imageData.data])
+
+  // let newData: Uint8ClampedArray = new Uint8ClampedArray([...imageData.data])
+  // console.log(newData)
+
+  for (let index = 0; index < imageData.data.length / 4; ++index) {
+    const x = index % imageData.width
+    const y = Math.floor(index / imageData.width)
+    const pixelData = getPixel(imageData, index)
+    const intensity = (pixelData[0] + pixelData[1] + pixelData[2]) / 3
+    if (intensity < 20) {
+      //is blak
+      columns[x] = ++columns[x]
+      rows[y] = ++rows[y]
+    } else if (intensity > 245) {
+      //is whit
+      newData[index * 4 + 3] = 0
+    }
+  }
+
   for (trimUp = 0; trimUp < rows.length; ++trimUp) {
     if (rows[trimUp] > 0) {
       break
@@ -189,43 +209,34 @@ const preprocessImage = (imageData: ImageData) => {
     }
   }
 
-  for (let row = 0; row < rows.length; ++row) {}
-  ;[].concat()
+  console.log(trimLeft, trimRight, trimUp, trimDown)
 
-  let newData: Uint8ClampedArray = new Uint8ClampedArray([...imageData.data])
-  console.log(newData)
-
-  for (let index = 0; index < imageData.data.length / 4; ++index) {
-    const x = index % imageData.width
-    const y = Math.floor(index / imageData.width)
-    const pixelData = getPixel(imageData, index)
-    const intensity = (pixelData[0] + pixelData[1] + pixelData[2]) / 3
-    if (intensity < 20) {
-      //is blak
-      columns[x] = ++columns[x]
-      rows[y] = ++rows[y]
-    } else if (intensity > 245) {
-      //is whit
-      newData[index * 4 + 3] = 0
-    }
+  let trimmedData: Array<number> = []
+  for (let row = trimUp; row <= trimDown; ++row) {
+    trimmedData = trimmedData.concat([
+      ...imageData.data.slice(
+        row * 4 * imageData.width + trimLeft * 4,
+        row * 4 * imageData.width + (trimRight + 1) * 4,
+      ),
+    ])
   }
 
-  console.log('TRIM:', trimLeft, trimRight, trimUp, trimDown)
-
-  const newImageData = new ImageData(newData, imageData.width)
+  console.log(trimmedData)
+  const newImageData = new ImageData(
+    new Uint8ClampedArray(trimmedData),
+    trimRight - trimLeft + 1,
+  )
   canvas.height = newImageData.height
   canvas.width = newImageData.width
-  canvas
-    .getContext('2d')
-    .putImageData(
-      newImageData,
-      0,
-      0,
-      trimLeft,
-      trimUp,
-      trimRight - trimLeft,
-      trimDown - trimUp,
-    )
+  canvas.getContext('2d').putImageData(
+    newImageData,
+    0,
+    0,
+    // trimLeft,
+    // trimUp,
+    // trimRight - trimLeft,
+    // trimDown - trimUp,
+  )
 
   console.log(newImageData.width, newImageData.height)
   return [canvas.width, canvas.height]
@@ -325,6 +336,7 @@ export default (props: IndexPageProps, context: any) => {
       const canvas = document.getElementById(
         'sudoku-image',
       ) as HTMLCanvasElement
+      // const drawCanvas = document.createElement('canvas')
       const image = new Image()
       const url = URL.createObjectURL(file)
       image.src = url
