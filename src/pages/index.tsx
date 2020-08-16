@@ -31,6 +31,17 @@ interface IndexPageProps {
 //   return (Number(`0x1${hex}`) ^ 0xffffff).toString(16).substr(1).toUpperCase()
 // }
 
+const SudokuImageCanvas = styled.canvas`
+  position: absolute;
+  width: 100%;
+  height: 100%;
+  flex: 1;
+  top: -0.8px;
+  left: -0.8px;
+  pointer-events: none;
+  z-index: 200;
+`
+
 const SudokuGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(9, auto);
@@ -45,18 +56,22 @@ const GridContainer = styled.div`
 `
 
 const GridBackground = styled.div`
+  position: relative;
   margin: 0;
+
   padding: 2.5px;
   background-color: #000000;
+  z-index: 0;
+  display: flex;
 `
 
 const GridCellStyle = styled.div`
-  position: relative;
   width: 5rem;
   height: 5rem;
+  /* z-index: -; */
 `
 const GridCellHighlightedAcross = styled.div`
-  z-index: 200;
+  z-index: 500;
   top: calc(50% - 2px);
   left: -15px;
   width: 15px;
@@ -66,13 +81,19 @@ const GridCellHighlightedAcross = styled.div`
 `
 
 const CentralNumberContainer = styled.div`
-  position: absolute;
   font-size: 3rem;
   width: 100%;
   height: 100%;
   align-items: center;
   justify-content: center;
   display: flex;
+`
+
+const NumbersContainer = styled.div`
+  position: relative;
+  width: 100%;
+  height: 100%;
+  z-index: 5000;
 `
 
 const GridCellHighlightedUp = styled.div`
@@ -126,25 +147,27 @@ const GridCell: React.FC<GridCellProps> = ({
       }}
     >
       {/* <GridCellHighlightedStyle /> */}
-      <CentralNumberContainer className="noselect">
-        {data.number}
-      </CentralNumberContainer>
-      {selected && (
-        <>
-          <GridCellHighlightedUp />
-          <GridCellHighlightedAcross />
-          <GridCellHighlightedUp
-            style={{
-              top: '100%',
-            }}
-          />
-          <GridCellHighlightedAcross
-            style={{
-              left: '100%',
-            }}
-          />
-        </>
-      )}
+      <NumbersContainer>
+        <CentralNumberContainer className="noselect">
+          {data.number}
+        </CentralNumberContainer>
+        {selected && (
+          <>
+            <GridCellHighlightedUp />
+            <GridCellHighlightedAcross />
+            <GridCellHighlightedUp
+              style={{
+                top: '5rem',
+              }}
+            />
+            <GridCellHighlightedAcross
+              style={{
+                left: '5em',
+              }}
+            />
+          </>
+        )}
+      </NumbersContainer>
       {index}
     </GridCellStyle>
   )
@@ -179,52 +202,66 @@ const preprocessImage = (imageData: ImageData) => {
       //is blak
       columns[x] = ++columns[x]
       rows[y] = ++rows[y]
-    } else if (intensity > 245) {
+    } else if (intensity > 230) {
       //is whit
       newData[index * 4 + 3] = 0
     }
   }
 
-  for (trimUp = 0; trimUp < rows.length; ++trimUp) {
-    if (rows[trimUp] > 0) {
-      break
-    }
-  }
+  const rowMax = Math.max(...rows)
+  const columnMax = Math.max(...columns)
 
-  for (trimDown = rows.length - 1; trimDown > 0; --trimDown) {
-    if (rows[trimDown] > 0) {
-      break
-    }
-  }
+  const leftEdge = columns.findIndex((value) => value > columnMax * 0.8)
+  const rightEdge =
+    columns.length -
+    1 -
+    columns.reverse().findIndex((value) => value > columnMax * 0.8)
 
-  for (trimLeft = 0; trimLeft < columns.length; ++trimLeft) {
-    if (columns[trimLeft] > 0) {
-      break
-    }
-  }
+  const topEdge = rows.findIndex((value) => value > rowMax * 0.8)
+  const bottomEdge =
+    rows.length - 1 - rows.reverse().findIndex((value) => value > rowMax * 0.8)
 
-  for (trimRight = columns.length - 1; trimRight > 0; --trimRight) {
-    if (columns[trimRight] > 0) {
-      break
-    }
-  }
+  console.log(leftEdge, rightEdge, topEdge, bottomEdge)
+  // for (trimUp = 0; trimUp < rows.length; ++trimUp) {
+  //   if (rows[trimUp] > 0) {
+  //     break
+  //   }
+  // }
 
-  console.log(trimLeft, trimRight, trimUp, trimDown)
+  // for (trimDown = rows.length - 1; trimDown > 0; --trimDown) {
+  //   if (rows[trimDown] > 0) {
+  //     break
+  //   }
+  // }
 
-  let trimmedData: Array<number> = []
-  for (let row = trimUp; row <= trimDown; ++row) {
-    trimmedData = trimmedData.concat([
-      ...imageData.data.slice(
-        row * 4 * imageData.width + trimLeft * 4,
-        row * 4 * imageData.width + (trimRight + 1) * 4,
-      ),
-    ])
-  }
+  // for (trimLeft = 0; trimLeft < columns.length; ++trimLeft) {
+  //   if (columns[trimLeft] > 0) {
+  //     break
+  //   }
+  // }
 
-  console.log(trimmedData)
+  // for (trimRight = columns.length - 1; trimRight > 0; --trimRight) {
+  //   if (columns[trimRight] > 0) {
+  //     break
+  //   }
+  // }
+
+  // console.log(trimLeft, trimRight, trimUp, trimDown)
+
+  // let trimmedData: Array<number> = []
+  // for (let row = trimUp; row <= trimDown; ++row) {
+  //   trimmedData = trimmedData.concat([
+  //     ...newData.slice(
+  //       row * 4 * imageData.width + trimLeft * 4,
+  //       row * 4 * imageData.width + (trimRight + 1) * 4,
+  //     ),
+  //   ])
+  // }
+
+  // console.log(trimmedData)
   const newImageData = new ImageData(
-    new Uint8ClampedArray(trimmedData),
-    trimRight - trimLeft + 1,
+    new Uint8ClampedArray(newData),
+    imageData.width,
   )
   canvas.height = newImageData.height
   canvas.width = newImageData.width
@@ -238,13 +275,13 @@ const preprocessImage = (imageData: ImageData) => {
     // trimDown - trimUp,
   )
 
-  console.log(newImageData.width, newImageData.height)
-  return [canvas.width, canvas.height]
+  // console.log(newImageData.width, newImageData.height)
+  return [leftEdge, rightEdge, topEdge, bottomEdge]
 }
 
 export default (props: IndexPageProps, context: any) => {
   const [selectedIndex, setSelectedIndex] = useState(null)
-
+  // const
   const states = useRef<Array<Array<CellData>>>([
     Array(81)
       .fill(1)
@@ -256,9 +293,14 @@ export default (props: IndexPageProps, context: any) => {
       })),
   ])
 
+  const [image, setImage] = useState<{
+    leftEdge: number
+    rightEdge: number
+    topEdge: number
+    bottomEdge: number
+    imageData: ImageData | null
+  }>({ leftEdge: 0, rightEdge: 0, topEdge: 0, bottomEdge: 0, imageData: null })
   const [boardStateIndex, setBoardStateIndex] = useState(0)
-
-  const [image, setImage] = useState(null)
   // const cells = localStorage.states[boardStateIndex]
   const cells = states.current[boardStateIndex]
 
@@ -275,7 +317,7 @@ export default (props: IndexPageProps, context: any) => {
   useEffect(() => {
     const keyCallback = (event: any) => {
       // Use regex to test if digit btwn 1-9
-      if (/[1-9]/.test(event.key)) {
+      if (/[1-9]/.test(event.key) && selectedIndex) {
         // setCells((cells) => {
         //   let newCells = [...cells]
         //   newCells[selectedIndex].number = parseInt(event.key)
@@ -353,7 +395,10 @@ export default (props: IndexPageProps, context: any) => {
           canvas.width,
           canvas.height,
         )
-        preprocessImage(imageData)
+        const [leftEdge, rightEdge, topEdge, bottomEdge] = preprocessImage(
+          imageData,
+        )
+        setImage({ leftEdge, rightEdge, topEdge, bottomEdge, imageData })
       }
     }
   }
@@ -369,10 +414,27 @@ export default (props: IndexPageProps, context: any) => {
           })
         }}
       />
-      <canvas width={500} height={500} id="sudoku-image" />
       <input type="file" id="upload-button" onChange={fileLoad} />
       <GridContainer>
         <GridBackground>
+          {/* 
+            box dimensions: 662*662 browser px
+            imagedata: 
+
+          
+          */}
+          <SudokuImageCanvas
+            id="sudoku-image"
+            style={{
+              width: image.imageData
+                ? `${
+                    (100 * image.imageData.width) /
+                    (image.rightEdge - image.leftEdge)
+                  }%`
+                : '100%',
+            }}
+          />
+          {/* <SudokuImafno */}
           {states.current[boardStateIndex] && (
             <SudokuGrid>
               {(states.current[boardStateIndex] as Array<CellData>).map(
@@ -381,6 +443,7 @@ export default (props: IndexPageProps, context: any) => {
                     onClick={(e) => {
                       e.preventDefault()
                       e.stopPropagation()
+                      console.log('CLICK')
                       setSelectedIndex(index)
                     }}
                     key={index}
