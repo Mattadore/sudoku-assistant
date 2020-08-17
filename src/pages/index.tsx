@@ -43,6 +43,7 @@ const SudokuImageCanvas = styled.canvas`
 `
 
 const SudokuGrid = styled.div`
+  padding: 1px;
   display: grid;
   grid-template-columns: repeat(9, auto);
   grid-template-rows: repeat(9, auto);
@@ -59,15 +60,15 @@ const GridBackground = styled.div`
   position: relative;
   margin: 0;
 
-  padding: 2.5px;
+  padding: 0px;
   background-color: #000000;
   z-index: 0;
   display: flex;
 `
 
 const GridCellStyle = styled.div`
-  width: 5rem;
-  height: 5rem;
+  width: 4rem;
+  height: 4rem;
   /* z-index: -; */
 `
 const GridCellHighlightedAcross = styled.div`
@@ -80,7 +81,19 @@ const GridCellHighlightedAcross = styled.div`
   background-color: #ddaa00;
 `
 
+const GridSelectedCircle = styled.div`
+  position: absolute;
+  z-index: -500;
+  background-color: #ffcc00;
+  top: calc(50% - 1rem);
+  left: calc(50% - 1rem);
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+`
+
 const CentralNumberContainer = styled.div`
+  z-index: 5000;
   font-size: 3rem;
   width: 100%;
   height: 100%;
@@ -118,8 +131,10 @@ interface CellData {
 interface GridCellProps {
   index: number
   data: CellData
+  selector: boolean
   selected: boolean
-  onClick: (event: React.MouseEvent<HTMLDivElement, MouseEvent>) => void
+  onMouseDown: (event: React.MouseEvent<HTMLDivElement, MouseEvent>) => void
+  onMouseEnter: (event: React.MouseEvent<HTMLDivElement, MouseEvent>) => void
   cellGap?: string
   boxGap?: string
 }
@@ -128,16 +143,19 @@ const GridCell: React.FC<GridCellProps> = ({
   index,
   data,
   selected,
-  onClick,
-  cellGap = '1px',
-  boxGap = '2.5px',
+  selector,
+  onMouseDown,
+  onMouseEnter,
+  cellGap = '0px',
+  boxGap = '1.5px',
 }) => {
   const column = index % 9
   const row = Math.floor(index / 9)
 
   return (
     <GridCellStyle
-      onClick={onClick}
+      onMouseDown={onMouseDown}
+      onMouseEnter={onMouseEnter}
       style={{
         backgroundColor: data.color,
         marginLeft: column % 3 === 0 ? boxGap : cellGap,
@@ -151,20 +169,25 @@ const GridCell: React.FC<GridCellProps> = ({
         <CentralNumberContainer className="noselect">
           {data.number}
         </CentralNumberContainer>
-        {selected && (
+        {selector && (
           <>
             <GridCellHighlightedUp />
             <GridCellHighlightedAcross />
             <GridCellHighlightedUp
               style={{
-                top: '5rem',
+                top: '4rem',
               }}
             />
             <GridCellHighlightedAcross
               style={{
-                left: '5em',
+                left: '4em',
               }}
             />
+          </>
+        )}
+        {selected && (
+          <>
+            <GridSelectedCircle />
           </>
         )}
       </NumbersContainer>
@@ -202,7 +225,7 @@ const preprocessImage = (imageData: ImageData) => {
       //is blak
       columns[x] = ++columns[x]
       rows[y] = ++rows[y]
-    } else if (intensity > 230) {
+    } else if (intensity > 215) {
       //is whit
       newData[index * 4 + 3] = 0
     }
@@ -222,43 +245,7 @@ const preprocessImage = (imageData: ImageData) => {
     rows.length - 1 - rows.reverse().findIndex((value) => value > rowMax * 0.8)
 
   console.log(leftEdge, rightEdge, topEdge, bottomEdge)
-  // for (trimUp = 0; trimUp < rows.length; ++trimUp) {
-  //   if (rows[trimUp] > 0) {
-  //     break
-  //   }
-  // }
 
-  // for (trimDown = rows.length - 1; trimDown > 0; --trimDown) {
-  //   if (rows[trimDown] > 0) {
-  //     break
-  //   }
-  // }
-
-  // for (trimLeft = 0; trimLeft < columns.length; ++trimLeft) {
-  //   if (columns[trimLeft] > 0) {
-  //     break
-  //   }
-  // }
-
-  // for (trimRight = columns.length - 1; trimRight > 0; --trimRight) {
-  //   if (columns[trimRight] > 0) {
-  //     break
-  //   }
-  // }
-
-  // console.log(trimLeft, trimRight, trimUp, trimDown)
-
-  // let trimmedData: Array<number> = []
-  // for (let row = trimUp; row <= trimDown; ++row) {
-  //   trimmedData = trimmedData.concat([
-  //     ...newData.slice(
-  //       row * 4 * imageData.width + trimLeft * 4,
-  //       row * 4 * imageData.width + (trimRight + 1) * 4,
-  //     ),
-  //   ])
-  // }
-
-  // console.log(trimmedData)
   const newImageData = new ImageData(
     new Uint8ClampedArray(newData),
     imageData.width,
@@ -280,7 +267,37 @@ const preprocessImage = (imageData: ImageData) => {
 }
 
 export default (props: IndexPageProps, context: any) => {
-  const [selectedIndex, setSelectedIndex] = useState(null)
+  const [selectorIndex, setSelectorIndex] = useState(null)
+  const [selectedIndices, setSelectedIndices] = useState([])
+
+  const select = (
+    index: number,
+    event: KeyboardEvent | React.MouseEvent<HTMLDivElement, MouseEvent>,
+    multi = false,
+  ) => {
+    setSelectorIndex(index)
+    if (event.ctrlKey) {
+      if (
+        typeof selectedIndices.find((value) => value === index) !== 'undefined'
+      ) {
+        setSelectedIndices((indices) =>
+          indices.filter((value) => value !== index),
+        )
+      }
+    } else {
+      if (event.shiftKey || multi) {
+        if (
+          typeof selectedIndices.find((value) => value === index) ===
+          'undefined'
+        ) {
+          setSelectedIndices((indices) => indices.concat(index))
+        }
+      } else {
+        setSelectedIndices([index])
+      }
+    }
+  }
+
   // const
   const states = useRef<Array<Array<CellData>>>([
     Array(81)
@@ -314,17 +331,25 @@ export default (props: IndexPageProps, context: any) => {
     setBoardStateIndex(boardStateIndex + 1)
   }
 
+  const updateSelected = (update: (cell: CellData) => void): void => {
+    updateBoard((cells) => {
+      for (let selected in selectedIndices) {
+        update(cells[selectedIndices[selected]])
+      }
+    })
+  }
+
   useEffect(() => {
-    const keyCallback = (event: any) => {
+    const keyCallback = (event: KeyboardEvent) => {
       // Use regex to test if digit btwn 1-9
-      if (/[1-9]/.test(event.key) && selectedIndex) {
+      if (/[1-9]/.test(event.key) && selectorIndex !== null) {
         // setCells((cells) => {
         //   let newCells = [...cells]
-        //   newCells[selectedIndex].number = parseInt(event.key)
+        //   newCells[selectorIndex].number = parseInt(event.key)
         //   return newCells
         // })
-        updateBoard((data) => {
-          data[selectedIndex].number = parseInt(event.key)
+        updateSelected((cell) => {
+          cell.number = parseInt(event.key)
         })
         //if it is a digit
         return
@@ -342,23 +367,23 @@ export default (props: IndexPageProps, context: any) => {
           }
           break
         case 'ArrowLeft':
-          if (selectedIndex % 9 > 0) {
-            setSelectedIndex(selectedIndex - 1)
+          if (selectorIndex % 9 > 0) {
+            select(selectorIndex - 1, event)
           }
           break
         case 'ArrowRight':
-          if (selectedIndex % 9 < 8) {
-            setSelectedIndex(selectedIndex + 1)
+          if (selectorIndex % 9 < 8) {
+            select(selectorIndex + 1, event)
           }
           break
         case 'ArrowUp':
-          if (selectedIndex > 8) {
-            setSelectedIndex(selectedIndex - 9)
+          if (selectorIndex > 8) {
+            select(selectorIndex - 9, event)
           }
           break
         case 'ArrowDown':
-          if (selectedIndex < 72) {
-            setSelectedIndex(selectedIndex + 9)
+          if (selectorIndex < 72) {
+            select(selectorIndex + 9, event)
           }
           break
       }
@@ -368,7 +393,7 @@ export default (props: IndexPageProps, context: any) => {
     return () => {
       document.removeEventListener('keydown', keyCallback)
     }
-  }, [selectedIndex, boardStateIndex])
+  }, [selectorIndex, selectedIndices, boardStateIndex])
 
   const fileLoad: (event: React.ChangeEvent<HTMLInputElement>) => void = (
     event,
@@ -406,17 +431,19 @@ export default (props: IndexPageProps, context: any) => {
   return (
     <div>
       <CompactPicker
-        color={selectedIndex ? cells[selectedIndex].color : '#000000'}
+        color={selectorIndex ? cells[selectorIndex].color : '#000000'}
         onChangeComplete={(color) => {
           // setColor(color.hex)
-          updateBoard((data) => {
-            data[selectedIndex].color = color.hex
+          updateSelected((cell) => {
+            cell.color = color.hex
           })
         }}
       />
       <input type="file" id="upload-button" onChange={fileLoad} />
       <GridContainer>
-        <GridBackground>
+        <GridBackground
+          style={image.imageData ? { backgroundColor: '#ffffff' } : {}}
+        >
           {/* 
             box dimensions: 662*662 browser px
             imagedata: 
@@ -426,28 +453,60 @@ export default (props: IndexPageProps, context: any) => {
           <SudokuImageCanvas
             id="sudoku-image"
             style={{
+              left: image.imageData
+                ? `-${
+                    (100 * image.leftEdge) /
+                    (image.rightEdge - image.leftEdge + 1)
+                  }%`
+                : '0px',
+              top: image.imageData
+                ? `-${
+                    (100 * image.topEdge) /
+                    (image.bottomEdge - image.topEdge + 1)
+                  }%`
+                : '0px',
               width: image.imageData
                 ? `${
                     (100 * image.imageData.width) /
-                    (image.rightEdge - image.leftEdge)
+                    (image.rightEdge - image.leftEdge + 1)
+                  }%`
+                : '100%',
+              height: image.imageData
+                ? `${
+                    (100 * image.imageData.height) /
+                    (image.bottomEdge - image.topEdge + 1)
                   }%`
                 : '100%',
             }}
           />
           {/* <SudokuImafno */}
           {states.current[boardStateIndex] && (
-            <SudokuGrid>
+            <SudokuGrid style={{ padding: image.imageData ? '1px' : '2px' }}>
               {(states.current[boardStateIndex] as Array<CellData>).map(
                 (cell, index) => (
                   <GridCell
-                    onClick={(e) => {
+                    onMouseDown={(e) => {
                       e.preventDefault()
                       e.stopPropagation()
                       console.log('CLICK')
-                      setSelectedIndex(index)
+                      select(index, e)
                     }}
+                    onMouseEnter={(e) => {
+                      if (e.buttons === 1) {
+                        e.preventDefault()
+                        e.stopPropagation()
+                        select(index, e, true)
+                      }
+                    }}
+                    boxGap={image.imageData ? '1px' : '2px'}
+                    cellGap={image.imageData ? '0px' : '1px'}
                     key={index}
-                    selected={selectedIndex === index}
+                    selected={
+                      // Check if in the list
+                      typeof selectedIndices.find((i) => i === index) !==
+                      'undefined'
+                    }
+                    selector={selectorIndex === index}
                     data={cell}
                     index={index}
                   />
