@@ -342,7 +342,7 @@ export default (props: IndexPageProps, context: any) => {
   useEffect(() => {
     const keyCallback = (event: KeyboardEvent) => {
       // Use regex to test if digit btwn 1-9
-      if (/[1-9]/.test(event.key) && selectorIndex !== null) {
+      if (/[1-9]/.test(event.key) && selectorIndex !== null && !event.ctrlKey) {
         // setCells((cells) => {
         //   let newCells = [...cells]
         //   newCells[selectorIndex].number = parseInt(event.key)
@@ -355,14 +355,31 @@ export default (props: IndexPageProps, context: any) => {
         return
       }
 
+      else if (/[1-9]/.test(event.key) && selectorIndex !== null && event.ctrlKey) {
+        updateSelected((cell) => {
+          let addInt = parseInt(event.key)
+          if (!cell.center.includes(addInt)) {
+            cell.center.push(addInt)
+            cell.center.sort()
+          }
+          // else {
+          // while (let i = 0; i < cell.center.length; ++i)
+
+          //cell.center.remove(addInt)
+          //}
+
+        })
+        return
+      }
+
       switch (event.key) {
         case 'y':
-          if (boardStateIndex < states.current.length - 1) {
+          if (event.ctrlKey && boardStateIndex < states.current.length - 1) {
             setBoardStateIndex(boardStateIndex + 1)
           }
           break
         case 'z':
-          if (boardStateIndex > 0) {
+          if (event.ctrlKey && boardStateIndex > 0) {
             setBoardStateIndex(boardStateIndex - 1)
           }
           break
@@ -385,6 +402,11 @@ export default (props: IndexPageProps, context: any) => {
           if (selectorIndex < 72) {
             select(selectorIndex + 9, event)
           }
+          break
+        case 'Delete':
+          updateSelected((cell) => {
+            cell.number = null
+          })
           break
       }
     }
@@ -455,27 +477,27 @@ export default (props: IndexPageProps, context: any) => {
             style={{
               left: image.imageData
                 ? `-${
-                    (100 * image.leftEdge) /
-                    (image.rightEdge - image.leftEdge + 1)
-                  }%`
+                (100 * image.leftEdge) /
+                (image.rightEdge - image.leftEdge + 1)
+                }%`
                 : '0px',
               top: image.imageData
                 ? `-${
-                    (100 * image.topEdge) /
-                    (image.bottomEdge - image.topEdge + 1)
-                  }%`
+                (100 * image.topEdge) /
+                (image.bottomEdge - image.topEdge + 1)
+                }%`
                 : '0px',
               width: image.imageData
                 ? `${
-                    (100 * image.imageData.width) /
-                    (image.rightEdge - image.leftEdge + 1)
-                  }%`
+                (100 * image.imageData.width) /
+                (image.rightEdge - image.leftEdge + 1)
+                }%`
                 : '100%',
               height: image.imageData
                 ? `${
-                    (100 * image.imageData.height) /
-                    (image.bottomEdge - image.topEdge + 1)
-                  }%`
+                (100 * image.imageData.height) /
+                (image.bottomEdge - image.topEdge + 1)
+                }%`
                 : '100%',
             }}
           />
