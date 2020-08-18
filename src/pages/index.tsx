@@ -92,7 +92,17 @@ const GridSelectedCircle = styled.div`
   border-radius: 50%;
 `
 
+const HintNumberTop = styled.div`
+  position: absolute;
+  z-index: 2000;
+  top: 3px;
+  left: 3px;
+  font-size: 12px;
+  font-weight: bold;
+`
+
 const CentralNumberContainer = styled.div`
+  /* font-weight: bold; */
   z-index: 5000;
   font-size: 3rem;
   width: 100%;
@@ -110,7 +120,7 @@ const NumbersContainer = styled.div`
 `
 
 const GridCellHighlightedUp = styled.div`
-  z-index: 200;
+  z-index: 500;
   /* left: calc(50% - 1.25px); */
   /* top: calc(100% - 10px); */
   left: calc(50% - 2px);
@@ -166,8 +176,11 @@ const GridCell: React.FC<GridCellProps> = ({
     >
       {/* <GridCellHighlightedStyle /> */}
       <NumbersContainer>
-        <CentralNumberContainer className="noselect">
-          {data.number}
+        <CentralNumberContainer
+          style={!data.number ? { fontSize: 12, fontWeight: 'bold' } : {}}
+          className="noselect"
+        >
+          {data.number ? data.number : data.center.join('')}
         </CentralNumberContainer>
         {selector && (
           <>
@@ -190,8 +203,12 @@ const GridCell: React.FC<GridCellProps> = ({
             <GridSelectedCircle />
           </>
         )}
+        {!data.number && (
+          <HintNumberTop className="noselect">
+            {data.corner.join('')}
+          </HintNumberTop>
+        )}
       </NumbersContainer>
-      {index}
     </GridCellStyle>
   )
 }
@@ -244,7 +261,7 @@ const preprocessImage = (imageData: ImageData) => {
   const bottomEdge =
     rows.length - 1 - rows.reverse().findIndex((value) => value > rowMax * 0.8)
 
-  console.log(leftEdge, rightEdge, topEdge, bottomEdge)
+  // console.log(leftEdge, rightEdge, topEdge, bottomEdge)
 
   const newImageData = new ImageData(
     new Uint8ClampedArray(newData),
@@ -342,15 +359,47 @@ export default (props: IndexPageProps, context: any) => {
   useEffect(() => {
     const keyCallback = (event: KeyboardEvent) => {
       // Use regex to test if digit btwn 1-9
+      event.preventDefault()
+      // console.log(event.key)
       if (/[1-9]/.test(event.key) && selectorIndex !== null) {
         // setCells((cells) => {
         //   let newCells = [...cells]
         //   newCells[selectorIndex].number = parseInt(event.key)
         //   return newCells
         // })
-        updateSelected((cell) => {
-          cell.number = parseInt(event.key)
-        })
+        if (event.ctrlKey) {
+          updateSelected((cell) => {
+            if (!cell.corner.includes(parseInt(event.key))) {
+              cell.corner.push(parseInt(event.key))
+              cell.corner.sort()
+            } else {
+              cell.corner = cell.corner.filter(
+                (value) => parseInt(event.key) !== value,
+              )
+              cell.corner.sort()
+            }
+          })
+        } else if (event.altKey) {
+          updateSelected((cell) => {
+            if (!cell.center.includes(parseInt(event.key))) {
+              cell.center.push(parseInt(event.key))
+              cell.center.sort()
+            } else {
+              cell.center = cell.center.filter(
+                (value) => parseInt(event.key) !== value,
+              )
+              cell.center.sort()
+            }
+          })
+        } else {
+          updateSelected((cell) => {
+            if (cell.number !== parseInt(event.key)) {
+              cell.number = parseInt(event.key)
+            } else {
+              cell.number = null
+            }
+          })
+        }
         //if it is a digit
         return
       }
