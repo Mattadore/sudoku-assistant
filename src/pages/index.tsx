@@ -214,6 +214,7 @@ const GridCell: React.FC<GridCellProps> = ({
     </GridCellStyle>
   )
 }
+
 function getPixel(imgData: ImageData, index: number) {
   return imgData.data.slice(index * 4, index * 4 + 4)
 }
@@ -244,7 +245,7 @@ const preprocessImage = (imageData: ImageData) => {
       //is blak
       columns[x] = ++columns[x]
       rows[y] = ++rows[y]
-    } else if (intensity > 215) {
+    } else if (intensity > 235) {
       //is whit
       newData[index * 4 + 3] = 0
     }
@@ -361,15 +362,17 @@ export default (props: IndexPageProps, context: any) => {
   useEffect(() => {
     const keyCallback = (event: KeyboardEvent) => {
       // Use regex to test if digit btwn 1-9
+
+
       event.preventDefault()
       // console.log(event.key)
-      if (/[1-9]/.test(event.key) && selectorIndex !== null) {
+      if (/[1-9]/.test(event.key) || /[!@#$%^&*(]/.test(event.key) && selectorIndex !== null) {
         // setCells((cells) => {
         //   let newCells = [...cells]
         //   newCells[selectorIndex].number = parseInt(event.key)
         //   return newCells
         // })
-        if (event.ctrlKey) {
+        if (event.altKey) {
           updateSelected((cell) => {
             if (!cell.corner.includes(parseInt(event.key))) {
               cell.corner.push(parseInt(event.key))
@@ -381,14 +384,16 @@ export default (props: IndexPageProps, context: any) => {
               cell.corner.sort()
             }
           })
-        } else if (event.altKey) {
+        } else if (event.shiftKey) {
+          let convertShift = ['!', '@', '#', '$', '%', '^', '&', '*', '(']
+          let shiftedKey = convertShift.indexOf(event.key) + 1
           updateSelected((cell) => {
-            if (!cell.center.includes(parseInt(event.key))) {
-              cell.center.push(parseInt(event.key))
+            if (!cell.center.includes(shiftedKey)) {
+              cell.center.push(shiftedKey)
               cell.center.sort()
             } else {
               cell.center = cell.center.filter(
-                (value) => parseInt(event.key) !== value,
+                (value) => shiftedKey !== value,
               )
               cell.center.sort()
             }
@@ -406,14 +411,15 @@ export default (props: IndexPageProps, context: any) => {
         return
       }
 
+
       switch (event.key) {
         case 'y':
-          if (boardStateIndex < states.current.length - 1) {
+          if (event.ctrlKey && boardStateIndex < states.current.length - 1) {
             setBoardStateIndex(boardStateIndex + 1)
           }
           break
         case 'z':
-          if (boardStateIndex > 0) {
+          if (event.ctrlKey && boardStateIndex > 0) {
             setBoardStateIndex(boardStateIndex - 1)
           }
           break
@@ -436,6 +442,20 @@ export default (props: IndexPageProps, context: any) => {
           if (selectorIndex < 72) {
             select(selectorIndex + 9, event)
           }
+          break
+        case 'Delete':
+          updateSelected((cell) => {
+            if (cell.number) {
+              cell.number = null
+            }
+            else if (cell.corner.length !== 0 || cell.center.length !== 0) {
+              cell.corner = []
+              cell.center = []
+            }
+            else {
+              cell.color = '#ffffff'
+            }
+          })
           break
       }
     }
@@ -506,27 +526,27 @@ export default (props: IndexPageProps, context: any) => {
             style={{
               left: image.imageData
                 ? `-${
-                    (100 * image.leftEdge) /
-                    (image.rightEdge - image.leftEdge + 1)
-                  }%`
+                (100 * image.leftEdge) /
+                (image.rightEdge - image.leftEdge + 1)
+                }%`
                 : '0px',
               top: image.imageData
                 ? `-${
-                    (100 * image.topEdge) /
-                    (image.bottomEdge - image.topEdge + 1)
-                  }%`
+                (100 * image.topEdge) /
+                (image.bottomEdge - image.topEdge + 1)
+                }%`
                 : '0px',
               width: image.imageData
                 ? `${
-                    (100 * image.imageData.width) /
-                    (image.rightEdge - image.leftEdge + 1)
-                  }%`
+                (100 * image.imageData.width) /
+                (image.rightEdge - image.leftEdge + 1)
+                }%`
                 : '100%',
               height: image.imageData
                 ? `${
-                    (100 * image.imageData.height) /
-                    (image.bottomEdge - image.topEdge + 1)
-                  }%`
+                (100 * image.imageData.height) /
+                (image.bottomEdge - image.topEdge + 1)
+                }%`
                 : '100%',
             }}
           />
