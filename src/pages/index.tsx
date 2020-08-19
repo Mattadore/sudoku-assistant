@@ -363,13 +363,13 @@ export default (props: IndexPageProps, context: any) => {
 
       event.preventDefault()
       // console.log(event.key)
-      if (/[1-9]/.test(event.key) && selectorIndex !== null) {
+      if (/[1-9]/.test(event.key) || /[!@#$%^&*(]/.test(event.key) && selectorIndex !== null) {
         // setCells((cells) => {
         //   let newCells = [...cells]
         //   newCells[selectorIndex].number = parseInt(event.key)
         //   return newCells
         // })
-        if (event.ctrlKey) {
+        if (event.altKey) {
           updateSelected((cell) => {
             if (!cell.corner.includes(parseInt(event.key))) {
               cell.corner.push(parseInt(event.key))
@@ -381,14 +381,16 @@ export default (props: IndexPageProps, context: any) => {
               cell.corner.sort()
             }
           })
-        } else if (event.altKey) {
+        } else if (event.shiftKey) {
+          let convertShift = ['!', '@', '#', '$', '%', '^', '&', '*', '('];
+          let shiftedKey = convertShift.indexOf(event.key) + 1
           updateSelected((cell) => {
-            if (!cell.center.includes(parseInt(event.key))) {
-              cell.center.push(parseInt(event.key))
+            if (!cell.center.includes(shiftedKey)) {
+              cell.center.push(shiftedKey)
               cell.center.sort()
             } else {
               cell.center = cell.center.filter(
-                (value) => parseInt(event.key) !== value,
+                (value) => shiftedKey !== value,
               )
               cell.center.sort()
             }
