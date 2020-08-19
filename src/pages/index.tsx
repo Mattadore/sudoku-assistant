@@ -212,6 +212,7 @@ const GridCell: React.FC<GridCellProps> = ({
     </GridCellStyle>
   )
 }
+
 function getPixel(imgData: ImageData, index: number) {
   return imgData.data.slice(index * 4, index * 4 + 4)
 }
@@ -242,7 +243,7 @@ const preprocessImage = (imageData: ImageData) => {
       //is blak
       columns[x] = ++columns[x]
       rows[y] = ++rows[y]
-    } else if (intensity > 215) {
+    } else if (intensity > 235) {
       //is whit
       newData[index * 4 + 3] = 0
     }
@@ -442,7 +443,16 @@ export default (props: IndexPageProps, context: any) => {
           break
         case 'Delete':
           updateSelected((cell) => {
-            cell.number = null
+            if (cell.number) {
+              cell.number = null
+            }
+            else if (cell.corner.length !== 0 || cell.center.length !== 0) {
+              cell.corner = []
+              cell.center = []
+            }
+            else {
+              cell.color = '#ffffff'
+            }
           })
           break
       }
