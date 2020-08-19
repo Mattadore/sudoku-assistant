@@ -382,7 +382,7 @@ export default (props: IndexPageProps, context: any) => {
             }
           })
         } else if (event.shiftKey) {
-          let convertShift = ['!', '@', '#', '$', '%', '^', '&', '*', '('];
+          let convertShift = ['!', '@', '#', '$', '%', '^', '&', '*', '(']
           let shiftedKey = convertShift.indexOf(event.key) + 1
           updateSelected((cell) => {
             if (!cell.center.includes(shiftedKey)) {
@@ -408,22 +408,6 @@ export default (props: IndexPageProps, context: any) => {
         return
       }
 
-      else if (/[1-9]/.test(event.key) && selectorIndex !== null && event.ctrlKey) {
-        updateSelected((cell) => {
-          let addInt = parseInt(event.key)
-          if (!cell.center.includes(addInt)) {
-            cell.center.push(addInt)
-            cell.center.sort()
-          }
-          // else {
-          // while (let i = 0; i < cell.center.length; ++i)
-
-          //cell.center.remove(addInt)
-          //}
-
-        })
-        return
-      }
 
       switch (event.key) {
         case 'y':
