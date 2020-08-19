@@ -5,6 +5,8 @@ import { graphql } from 'gatsby'
 import { CompactPicker } from 'react-color'
 import styled from '@emotion/styled'
 import produce from 'immer'
+import cuid from 'cuid'
+import Peer from 'peerjs'
 
 // to generate all types from graphQL schema
 interface IndexPageProps {
@@ -282,10 +284,33 @@ const preprocessImage = (imageData: ImageData) => {
   // console.log(newImageData.width, newImageData.height)
   return [leftEdge, rightEdge, topEdge, bottomEdge]
 }
+// const
+const states = useRef<Array<Array<CellData>>>([
+  Array(81)
+    .fill(1)
+    .map((value) => ({
+      number: null,
+      center: [],
+      corner: [],
+      color: '#ffffff',
+    })),
+])
+
+const [image, setImage] = useState<{
+  leftEdge: number
+  rightEdge: number
+  topEdge: number
+  bottomEdge: number
+  imageData: ImageData | null
+}>({ leftEdge: 0, rightEdge: 0, topEdge: 0, bottomEdge: 0, imageData: null })
+const [boardStateIndex, setBoardStateIndex] = useState(0)
+// const cells = localStorage.states[boardStateIndex]
+const cells = states.current[boardStateIndex]
 
 export default (props: IndexPageProps, context: any) => {
   const [selectorIndex, setSelectorIndex] = useState(null)
   const [selectedIndices, setSelectedIndices] = useState([])
+  const peer = useRef([])
 
   const select = (
     index: number,
@@ -314,29 +339,6 @@ export default (props: IndexPageProps, context: any) => {
       }
     }
   }
-
-  // const
-  const states = useRef<Array<Array<CellData>>>([
-    Array(81)
-      .fill(1)
-      .map((value) => ({
-        number: null,
-        center: [],
-        corner: [],
-        color: '#ffffff',
-      })),
-  ])
-
-  const [image, setImage] = useState<{
-    leftEdge: number
-    rightEdge: number
-    topEdge: number
-    bottomEdge: number
-    imageData: ImageData | null
-  }>({ leftEdge: 0, rightEdge: 0, topEdge: 0, bottomEdge: 0, imageData: null })
-  const [boardStateIndex, setBoardStateIndex] = useState(0)
-  // const cells = localStorage.states[boardStateIndex]
-  const cells = states.current[boardStateIndex]
 
   const updateBoard = (update: (method: Array<CellData>) => void): void => {
     const out = produce(cells, (cellsDraft: Array<CellData>) => {
