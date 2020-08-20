@@ -6,6 +6,7 @@
     "module": "commonjs",
     "target": "esnext",
     "jsx": "react",
+    "strict": false,
     "lib": ["dom", "es2015", "es2017"],
     "types": ["@emotion/core"],
     "esModuleInterop": true

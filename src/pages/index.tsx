@@ -1,11 +1,10 @@
 import * as React from 'react'
 import Link from 'gatsby-link'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect, useRef, useCallback } from 'react'
 import { graphql } from 'gatsby'
 import { CompactPicker } from 'react-color'
 import styled from '@emotion/styled'
 import produce from 'immer'
-import cuid from 'cuid'
 import Peer from 'peerjs'
 
 // to generate all types from graphQL schema
@@ -87,10 +86,10 @@ const GridSelectedCircle = styled.div`
   position: absolute;
   z-index: -500;
   background-color: #ffcc00;
-  top: calc(50% - 1rem);
-  left: calc(50% - 1rem);
-  width: 2rem;
-  height: 2rem;
+  top: calc(50% - 0.75rem);
+  left: calc(50% - 0.75rem);
+  width: 1.5rem;
+  height: 1.5rem;
   border-radius: 50%;
 `
 
@@ -140,10 +139,19 @@ interface CellData {
   color: string
 }
 
+interface CellDiff {
+  number?: number | null
+  center?: number[]
+  corner?: number[]
+  color?: string
+}
+
 interface GridCellProps {
   index: number
   data: CellData
   selector: boolean
+  multiSelector: boolean
+  multiSelected: boolean
   selected: boolean
   onMouseDown: (event: React.MouseEvent<HTMLDivElement, MouseEvent>) => void
   onMouseEnter: (event: React.MouseEvent<HTMLDivElement, MouseEvent>) => void
@@ -156,6 +164,8 @@ const GridCell: React.FC<GridCellProps> = ({
   data,
   selected,
   selector,
+  multiSelector,
+  multiSelected,
   onMouseDown,
   onMouseEnter,
   cellGap = '0px',
@@ -184,17 +194,24 @@ const GridCell: React.FC<GridCellProps> = ({
         >
           {data.number ? data.number : data.center.join('')}
         </CentralNumberContainer>
-        {selector && (
+        {(selector || multiSelector) && (
           <>
-            <GridCellHighlightedUp />
-            <GridCellHighlightedAcross />
+            <GridCellHighlightedUp
+              style={multiSelector ? { backgroundColor: '#8888ff' } : {}}
+            />
+            <GridCellHighlightedAcross
+              style={multiSelector ? { backgroundColor: '#3388ff' } : {}}
+            />
             <GridCellHighlightedUp
               style={{
+                ...(multiSelector ? { backgroundColor: '#3388ff' } : {}),
                 top: '4rem',
               }}
             />
             <GridCellHighlightedAcross
               style={{
+                ...(multiSelector ? { backgroundColor: '#3388ff' } : {}),
+
                 left: '4em',
               }}
             />
@@ -203,6 +220,11 @@ const GridCell: React.FC<GridCellProps> = ({
         {selected && (
           <>
             <GridSelectedCircle />
+          </>
+        )}
+        {multiSelected && (
+          <>
+            <GridSelectedCircle style={{ backgroundColor: '#3388ff' }} />
           </>
         )}
         {!data.number && (
@@ -234,7 +256,6 @@ const preprocessImage = (imageData: ImageData) => {
   let newData: Uint8ClampedArray = new Uint8ClampedArray([...imageData.data])
 
   // let newData: Uint8ClampedArray = new Uint8ClampedArray([...imageData.data])
-  // console.log(newData)
 
   for (let index = 0; index < imageData.data.length / 4; ++index) {
     const x = index % imageData.width
@@ -264,54 +285,183 @@ const preprocessImage = (imageData: ImageData) => {
   const bottomEdge =
     rows.length - 1 - rows.reverse().findIndex((value) => value > rowMax * 0.8)
 
-  // console.log(leftEdge, rightEdge, topEdge, bottomEdge)
-
   const newImageData = new ImageData(
     new Uint8ClampedArray(newData),
     imageData.width,
   )
   canvas.height = newImageData.height
   canvas.width = newImageData.width
-  canvas.getContext('2d').putImageData(
-    newImageData,
-    0,
-    0,
-    // trimLeft,
-    // trimUp,
-    // trimRight - trimLeft,
-    // trimDown - trimUp,
-  )
+  canvas.getContext('2d').putImageData(newImageData, 0, 0)
 
-  // console.log(newImageData.width, newImageData.height)
   return [leftEdge, rightEdge, topEdge, bottomEdge]
 }
-// const
-const states = useRef<Array<Array<CellData>>>([
-  Array(81)
-    .fill(1)
-    .map((value) => ({
-      number: null,
-      center: [],
-      corner: [],
-      color: '#ffffff',
-    })),
-])
 
-const [image, setImage] = useState<{
-  leftEdge: number
-  rightEdge: number
-  topEdge: number
-  bottomEdge: number
-  imageData: ImageData | null
-}>({ leftEdge: 0, rightEdge: 0, topEdge: 0, bottomEdge: 0, imageData: null })
-const [boardStateIndex, setBoardStateIndex] = useState(0)
-// const cells = localStorage.states[boardStateIndex]
-const cells = states.current[boardStateIndex]
+// const rectify(currentState: CellData[], incomingState: CellDiff[] ) {
+
+// }
+
+const getDiff = (
+  starting: CellData[],
+  updated: CellData[],
+): { [key: string]: CellDiff } => {
+  const diff: { [key: string]: CellDiff } = {}
+  for (let key in updated) {
+    if (starting[key] !== updated[key]) {
+      diff[key] = {}
+      for (let prop in updated[key]) {
+        if ((updated[key] as any)[prop] !== (starting[key] as any)[prop]) {
+          ;(diff[key] as any)[prop] = (updated[key] as any)[prop]
+        }
+      }
+      if (diff[key] === {}) {
+        delete diff[key]
+      }
+    }
+  }
+  return diff
+}
 
 export default (props: IndexPageProps, context: any) => {
   const [selectorIndex, setSelectorIndex] = useState(null)
+  const [multiSelectorIndices, setMultiSelectorIndices] = useState<{
+    [key: string]: number
+  }>({})
+  const [connections, setConnections] = useState<{
+    [key: string]: Peer.DataConnection
+  }>({})
   const [selectedIndices, setSelectedIndices] = useState([])
-  const peer = useRef([])
+  const [multiSelectedIndices, setMultiSelectedIndices] = useState<{
+    [key: string]: Array<number>
+  }>({})
+
+  const peer = useRef<Peer>(null)
+  const [onlineId, setOnlineId] = useState('offline')
+  const [hostId, setHostId] = useState('')
+  const [clientIds, setClientIds] = useState<Array<string>>([])
+  const [boardStateIndex, setBoardStateIndex] = useState(0)
+  const boardStateIndexRef = useRef(0)
+  boardStateIndexRef.current = boardStateIndex
+
+  const states = useRef<Array<Array<CellData>>>([
+    Array(81)
+      .fill(1)
+      .map((value) => ({
+        number: null,
+        center: [],
+        corner: [],
+        color: '#ffffff',
+      })),
+  ])
+
+  // console.log('CLIENT IDS', clientIds.length)
+  let updateBoard = (update: (method: Array<CellData>) => void): void => {
+    //useCallback(
+    const out = produce(
+      states.current[boardStateIndexRef.current],
+      (cellsDraft: Array<CellData>) => {
+        update(cellsDraft)
+      },
+    )
+    console.log(boardStateIndexRef.current, states.current.length)
+    // states.current.splice(
+    //   boardStateIndexRef.current + 1,
+    //   states.current.length,
+    // )
+    // console.log('STATZ', states.current)
+    states.current.push(out)
+    // console.log('CLIENTIDS', clientIds)
+    if (clientIds.length !== 0) {
+      for (let clientId in clientIds) {
+        connections[clientIds[clientId]].send({
+          type: 'state',
+          state: out,
+        })
+      }
+    } else if (Object.keys(connections).length !== 0) {
+      const diff = getDiff(states.current[boardStateIndexRef.current], out)
+      for (let key in connections) {
+        connections[key].send({ type: 'update', diff: diff })
+      }
+    }
+    setBoardStateIndex((boardStateIndex) => boardStateIndex + 1)
+  } //,
+  // [boardStateIndex, connections, clientIds, states.current],
+  // )
+
+  const hostProcessData = (conn: Peer.DataConnection, data: any) => {
+    if (data && typeof data !== 'string' && 'type' in data) {
+      if (data.type === 'pointer') {
+        setMultiSelectorIndices((indices) => ({
+          ...indices,
+          [conn.peer]: data.index,
+        }))
+      } else if (data.type === 'selected') {
+        setMultiSelectedIndices((indices) => ({
+          ...indices,
+          [conn.peer]: data.indices,
+        }))
+      } else if (data.type === 'update') {
+        console.log(boardStateIndexRef.current, 'CURRENT THING')
+        updateBoard((cells) => {
+          for (let index in (data as {
+            diff: {
+              [key: string]: any
+            }
+          }).diff) {
+            Object.assign(cells[parseInt(index)], data.diff[index])
+          }
+        })
+        // states.current.push(states.current[boardStateIndexRef.current])
+      }
+    }
+  }
+
+  useEffect(() => {
+    peer.current = new Peer()
+    peer.current.on('open', (id) => {
+      setOnlineId(id)
+    })
+  }, [])
+
+  useEffect(() => {
+    peer.current.on('connection', (conn) => {
+      setConnections((connections) => ({
+        ...connections,
+        [conn.peer]: conn,
+      }))
+      conn.on('close', () => {
+        console.log('CLOSING')
+        setConnections((connections) => {
+          let { [conn.peer]: toDel, ...out } = connections
+          return out
+        })
+        setClientIds((ids) => ids.filter((id) => id !== conn.peer)) // Remove id from client id list
+      })
+      conn.on('open', () => {
+        updateBoard(() => {}) //:P
+        conn.on('data', (data) => {
+          hostProcessData(conn, data)
+        })
+        setClientIds((clients) => [...clients, conn.peer])
+        // conn.send({ type: 'pointer', index: index })
+      })
+
+      // conn.send({
+      //   type: 'state',
+      //   state: states.current[boardStateIndexRef.current],
+      // })
+    })
+  }, [])
+
+  const [image, setImage] = useState<{
+    leftEdge: number
+    rightEdge: number
+    topEdge: number
+    bottomEdge: number
+    imageData: ImageData | null
+  }>({ leftEdge: 0, rightEdge: 0, topEdge: 0, bottomEdge: 0, imageData: null })
+  // const cells = localStorage.states[boardStateIndex]
+  const cells = states.current[boardStateIndex]
 
   const select = (
     index: number,
@@ -319,13 +469,21 @@ export default (props: IndexPageProps, context: any) => {
     multi = false,
   ) => {
     setSelectorIndex(index)
+    for (let key in connections) {
+      connections[key].send({ type: 'pointer', index: index })
+    }
     if (event.ctrlKey) {
-      if (
-        typeof selectedIndices.find((value) => value === index) !== 'undefined'
-      ) {
-        setSelectedIndices((indices) =>
-          indices.filter((value) => value !== index),
-        )
+      if (selectedIndices.includes(index)) {
+        setSelectedIndices((indices) => {
+          const out = indices.filter((value) => value !== index)
+          for (let key in connections) {
+            connections[key].send({
+              type: 'selected',
+              indices: out,
+            })
+          }
+          return out
+        })
       }
     } else {
       if (event.shiftKey || multi) {
@@ -333,22 +491,27 @@ export default (props: IndexPageProps, context: any) => {
           typeof selectedIndices.find((value) => value === index) ===
           'undefined'
         ) {
-          setSelectedIndices((indices) => indices.concat(index))
+          setSelectedIndices((indices) => {
+            const out = indices.concat(index)
+            for (let key in connections) {
+              connections[key].send({
+                type: 'selected',
+                indices: out,
+              })
+            }
+            return out
+          })
         }
       } else {
         setSelectedIndices([index])
+        for (let key in connections) {
+          connections[key].send({
+            type: 'selected',
+            indices: [index],
+          })
+        }
       }
     }
-  }
-
-  const updateBoard = (update: (method: Array<CellData>) => void): void => {
-    const out = produce(cells, (cellsDraft: Array<CellData>) => {
-      update(cellsDraft)
-    })
-    states.current.splice(boardStateIndex + 1, states.current.length)
-    states.current.push(out)
-
-    setBoardStateIndex(boardStateIndex + 1)
   }
 
   const updateSelected = (update: (cell: CellData) => void): void => {
@@ -363,10 +526,14 @@ export default (props: IndexPageProps, context: any) => {
     const keyCallback = (event: KeyboardEvent) => {
       // Use regex to test if digit btwn 1-9
 
-
-      event.preventDefault()
-      // console.log(event.key)
-      if (/[1-9]/.test(event.key) || /[!@#$%^&*(]/.test(event.key) && selectorIndex !== null) {
+      if (
+        /[1-9]/.test(event.key) ||
+        (/[!@#$%^&*(]/.test(event.key) && selectorIndex !== null)
+      ) {
+        if (event.altKey || event.ctrlKey) {
+          //shit so annoying
+          event.preventDefault()
+        }
         // setCells((cells) => {
         //   let newCells = [...cells]
         //   newCells[selectorIndex].number = parseInt(event.key)
@@ -392,9 +559,7 @@ export default (props: IndexPageProps, context: any) => {
               cell.center.push(shiftedKey)
               cell.center.sort()
             } else {
-              cell.center = cell.center.filter(
-                (value) => shiftedKey !== value,
-              )
+              cell.center = cell.center.filter((value) => shiftedKey !== value)
               cell.center.sort()
             }
           })
@@ -410,7 +575,6 @@ export default (props: IndexPageProps, context: any) => {
         //if it is a digit
         return
       }
-
 
       switch (event.key) {
         case 'y':
@@ -447,12 +611,10 @@ export default (props: IndexPageProps, context: any) => {
           updateSelected((cell) => {
             if (cell.number) {
               cell.number = null
-            }
-            else if (cell.corner.length !== 0 || cell.center.length !== 0) {
+            } else if (cell.corner.length !== 0 || cell.center.length !== 0) {
               cell.corner = []
               cell.center = []
-            }
-            else {
+            } else {
               cell.color = '#ffffff'
             }
           })
@@ -499,6 +661,46 @@ export default (props: IndexPageProps, context: any) => {
     }
   }
 
+  interface hostToClientData {
+    type: string
+    index?: number
+    state?: CellData[]
+    indices?: [number]
+  }
+
+  const initiateClient = () => {
+    const conn = peer.current.connect(hostId)
+    conn.on('open', () => {
+      conn.send('hello')
+      conn.on('data', (data: hostToClientData) => {
+        if (data && typeof data !== 'string' && 'type' in data) {
+          if (data.type === 'pointer') {
+            setMultiSelectorIndices((indices) => ({
+              ...indices,
+              [conn.peer]: data.index,
+            }))
+          } else if (data.type === 'selected') {
+            setMultiSelectedIndices((indices) => ({
+              ...indices,
+              [conn.peer]: data.indices,
+            }))
+          } else if (data.type === 'state') {
+            updateBoard((cells) => {
+              for (let i in cells) {
+                Object.assign(cells[i], data.state[i])
+              }
+            })
+
+            // updateBoard(state => rectify)
+          }
+        }
+
+        // console.log('Received', data)
+      })
+    })
+    setConnections((connections) => ({ ...connections, [hostId]: conn }))
+  }
+
   return (
     <div>
       <CompactPicker
@@ -511,6 +713,26 @@ export default (props: IndexPageProps, context: any) => {
         }}
       />
       <input type="file" id="upload-button" onChange={fileLoad} />
+      {onlineId}
+      <input
+        // type="text"
+        onKeyDown={(event) => {
+          if (event.key === 'Enter') {
+            initiateClient()
+          }
+        }}
+        onChange={(event) => {
+          setHostId(event.target.value)
+        }}
+        value={hostId}
+      />
+      {hostId}
+      {clientIds.join(', ')}{' '}
+      {connections !== {}
+        ? clientIds.length !== 0
+          ? 'HOST'
+          : 'CLIENT'
+        : 'NOT CONNECTED'}
       <GridContainer>
         <GridBackground
           style={image.imageData ? { backgroundColor: '#ffffff' } : {}}
@@ -526,27 +748,27 @@ export default (props: IndexPageProps, context: any) => {
             style={{
               left: image.imageData
                 ? `-${
-                (100 * image.leftEdge) /
-                (image.rightEdge - image.leftEdge + 1)
-                }%`
+                    (100 * image.leftEdge) /
+                    (image.rightEdge - image.leftEdge + 1)
+                  }%`
                 : '0px',
               top: image.imageData
                 ? `-${
-                (100 * image.topEdge) /
-                (image.bottomEdge - image.topEdge + 1)
-                }%`
+                    (100 * image.topEdge) /
+                    (image.bottomEdge - image.topEdge + 1)
+                  }%`
                 : '0px',
               width: image.imageData
                 ? `${
-                (100 * image.imageData.width) /
-                (image.rightEdge - image.leftEdge + 1)
-                }%`
+                    (100 * image.imageData.width) /
+                    (image.rightEdge - image.leftEdge + 1)
+                  }%`
                 : '100%',
               height: image.imageData
                 ? `${
-                (100 * image.imageData.height) /
-                (image.bottomEdge - image.topEdge + 1)
-                }%`
+                    (100 * image.imageData.height) /
+                    (image.bottomEdge - image.topEdge + 1)
+                  }%`
                 : '100%',
             }}
           />
@@ -557,9 +779,8 @@ export default (props: IndexPageProps, context: any) => {
                 (cell, index) => (
                   <GridCell
                     onMouseDown={(e) => {
-                      e.preventDefault()
-                      e.stopPropagation()
-                      console.log('CLICK')
+                      // e.preventDefault()
+                      // e.stopPropagation()
                       select(index, e)
                     }}
                     onMouseEnter={(e) => {
@@ -574,10 +795,19 @@ export default (props: IndexPageProps, context: any) => {
                     key={index}
                     selected={
                       // Check if in the list
-                      typeof selectedIndices.find((i) => i === index) !==
-                      'undefined'
+                      selectedIndices.includes(index)
+                    }
+                    multiSelected={
+                      typeof Object.keys(multiSelectedIndices).find((i) =>
+                        multiSelectedIndices[i].includes(index),
+                      ) !== 'undefined'
                     }
                     selector={selectorIndex === index}
+                    multiSelector={
+                      typeof Object.keys(multiSelectorIndices).find(
+                        (key) => multiSelectorIndices[key] === index,
+                      ) !== 'undefined'
+                    }
                     data={cell}
                     index={index}
                   />
