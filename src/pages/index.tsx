@@ -5,6 +5,8 @@ import { graphql } from 'gatsby'
 import { CompactPicker } from 'react-color'
 import styled from '@emotion/styled'
 import produce from 'immer'
+import { Divider, Button } from 'semantic-ui-react'
+import RichTextEditor from 'react-rte'
 import Peer from 'peerjs'
 
 // to generate all types from graphQL schema
@@ -43,6 +45,22 @@ const SudokuImageCanvas = styled.canvas`
   z-index: 200;
 `
 
+const PageContainer = styled.div`
+  display: flex;
+  width: 100%;
+  height: 100vh;
+  flex-direction: row;
+`
+
+const SidebarContainer = styled.div`
+  /* display: flex; */
+  /* flex-direction: column; */
+  flex: 1;
+  max-width: 25rem;
+  height: 100%;
+  background-color: #ffffff;
+`
+
 const SudokuGrid = styled.div`
   padding: 1px;
   display: grid;
@@ -54,7 +72,10 @@ const GridContainer = styled.div`
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 100%;
+  background-color: #ddddff;
+
+  /* width: 100%; */
+  flex: 1;
 `
 
 const GridBackground = styled.div`
@@ -68,8 +89,8 @@ const GridBackground = styled.div`
 `
 
 const GridCellStyle = styled.div`
-  width: 4rem;
-  height: 4rem;
+  width: 5rem;
+  height: 5rem;
   /* z-index: -; */
 `
 const GridCellHighlightedAcross = styled.div`
@@ -152,6 +173,7 @@ interface GridCellProps {
   selector: boolean
   multiSelector: boolean
   multiSelected: boolean
+  myColor: string
   selected: boolean
   onMouseDown: (event: React.MouseEvent<HTMLDivElement, MouseEvent>) => void
   onMouseEnter: (event: React.MouseEvent<HTMLDivElement, MouseEvent>) => void
@@ -166,6 +188,7 @@ const GridCell: React.FC<GridCellProps> = ({
   selector,
   multiSelector,
   multiSelected,
+  myColor,
   onMouseDown,
   onMouseEnter,
   cellGap = '0px',
@@ -197,29 +220,30 @@ const GridCell: React.FC<GridCellProps> = ({
         {(selector || multiSelector) && (
           <>
             <GridCellHighlightedUp
-              style={multiSelector ? { backgroundColor: '#8888ff' } : {}}
+              style={{ backgroundColor: multiSelector ? '#3388ff' : myColor }}
             />
             <GridCellHighlightedAcross
-              style={multiSelector ? { backgroundColor: '#3388ff' } : {}}
+              style={{ backgroundColor: multiSelector ? '#3388ff' : myColor }}
             />
             <GridCellHighlightedUp
               style={{
-                ...(multiSelector ? { backgroundColor: '#3388ff' } : {}),
-                top: '4rem',
+                backgroundColor: multiSelector ? '#3388ff' : myColor,
+                top: '5rem',
               }}
             />
             <GridCellHighlightedAcross
               style={{
-                ...(multiSelector ? { backgroundColor: '#3388ff' } : {}),
-
-                left: '4em',
+                backgroundColor: multiSelector ? '#3388ff' : myColor,
+                left: '5em',
               }}
             />
           </>
         )}
         {selected && (
           <>
-            <GridSelectedCircle />
+            <GridSelectedCircle
+              style={{ backgroundColor: multiSelector ? '#3388ff' : myColor }}
+            />
           </>
         )}
         {multiSelected && (
@@ -334,12 +358,18 @@ export default (props: IndexPageProps, context: any) => {
     [key: string]: Array<number>
   }>({})
 
+  const [pickingMe, setPickingMe] = useState(false)
+  const [myColor, setMyColor] = useState('#ffcc00')
+
   const peer = useRef<Peer>(null)
   const [onlineId, setOnlineId] = useState('offline')
   const [hostId, setHostId] = useState('')
   const [clientIds, setClientIds] = useState<Array<string>>([])
   const [boardStateIndex, setBoardStateIndex] = useState(0)
   const boardStateIndexRef = useRef(0)
+  const [editorText, setEditorText] = useState(
+    RichTextEditor.createEmptyValue(),
+  )
   boardStateIndexRef.current = boardStateIndex
 
   const states = useRef<Array<Array<CellData>>>([
@@ -362,7 +392,9 @@ export default (props: IndexPageProps, context: any) => {
         update(cellsDraft)
       },
     )
-    console.log(boardStateIndexRef.current, states.current.length)
+    console.log('INDEX: ', boardStateIndex)
+
+    console.log('REF: ', boardStateIndexRef.current, states.current.length)
     // states.current.splice(
     //   boardStateIndexRef.current + 1,
     //   states.current.length,
@@ -702,37 +734,7 @@ export default (props: IndexPageProps, context: any) => {
   }
 
   return (
-    <div>
-      <CompactPicker
-        color={selectorIndex ? cells[selectorIndex].color : '#000000'}
-        onChangeComplete={(color) => {
-          // setColor(color.hex)
-          updateSelected((cell) => {
-            cell.color = color.hex
-          })
-        }}
-      />
-      <input type="file" id="upload-button" onChange={fileLoad} />
-      {onlineId}
-      <input
-        // type="text"
-        onKeyDown={(event) => {
-          if (event.key === 'Enter') {
-            initiateClient()
-          }
-        }}
-        onChange={(event) => {
-          setHostId(event.target.value)
-        }}
-        value={hostId}
-      />
-      {hostId}
-      {clientIds.join(', ')}{' '}
-      {connections !== {}
-        ? clientIds.length !== 0
-          ? 'HOST'
-          : 'CLIENT'
-        : 'NOT CONNECTED'}
+    <PageContainer>
       <GridContainer>
         <GridBackground
           style={image.imageData ? { backgroundColor: '#ffffff' } : {}}
@@ -743,6 +745,7 @@ export default (props: IndexPageProps, context: any) => {
 
           
           */}
+
           <SudokuImageCanvas
             id="sudoku-image"
             style={{
@@ -778,6 +781,7 @@ export default (props: IndexPageProps, context: any) => {
               {(states.current[boardStateIndex] as Array<CellData>).map(
                 (cell, index) => (
                   <GridCell
+                    myColor={myColor}
                     onMouseDown={(e) => {
                       // e.preventDefault()
                       // e.stopPropagation()
@@ -817,7 +821,62 @@ export default (props: IndexPageProps, context: any) => {
           )}
         </GridBackground>
       </GridContainer>
-    </div>
+      <SidebarContainer>
+        <Divider horizontal>Color</Divider>
+        <CompactPicker
+          color={
+            pickingMe
+              ? myColor
+              : selectorIndex
+              ? cells[selectorIndex].color
+              : '#000000'
+          }
+          onChangeComplete={(color) => {
+            // setColor(color.hex)
+            if (pickingMe) {
+              setMyColor(color.hex)
+            } else {
+              updateSelected((cell) => {
+                cell.color = color.hex
+              })
+            }
+          }}
+        />
+        <Button
+          onClick={() => {
+            setPickingMe((value) => !value)
+          }}
+          style={{ backgroundColor: myColor }}
+        >
+          {pickingMe ? 'Picking my color...' : 'Pick my color'}{' '}
+        </Button>
+        <Divider horizontal>File</Divider>
+        <input type="file" id="upload-button" onChange={fileLoad} />
+        <Divider horizontal>Multiplayer</Divider>
+        {onlineId}
+        <input
+          // type="text"
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              initiateClient()
+            }
+          }}
+          onChange={(event) => {
+            setHostId(event.target.value)
+          }}
+          value={hostId}
+        />
+        {hostId}
+        {clientIds.join(', ')}{' '}
+        {connections !== {}
+          ? clientIds.length !== 0
+            ? 'HOST'
+            : 'CLIENT'
+          : 'NOT CONNECTED'}
+        <Divider horizontal>Notes</Divider>
+        <RichTextEditor value={editorText} onChange={setEditorText} />
+      </SidebarContainer>
+    </PageContainer>
   )
 }
 

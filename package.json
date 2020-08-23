@@ -11,6 +11,7 @@
     "@types/react": "^16.9.46",
     "@types/react-color": "^3.0.4",
     "@types/react-dom": "^16.9.8",
+    "@types/react-rte": "^0.16.1",
     "cuid": "^2.1.8",
     "firebase-tools": "^8.7.0",
     "gatsby": "^2.24.47",
@@ -25,6 +26,7 @@
     "react-color": "^2.18.1",
     "react-dom": "^16.13.1",
     "react-helmet": "^6.1.0",
+    "react-rte": "^0.16.3",
     "semantic-ui-css": "^2.4.1",
     "semantic-ui-react": "^1.2.0"
   },
