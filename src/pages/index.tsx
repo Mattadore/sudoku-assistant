@@ -5,9 +5,10 @@ import { graphql } from 'gatsby'
 import { CompactPicker } from 'react-color'
 import styled from '@emotion/styled'
 import produce from 'immer'
-import { Divider, Button } from 'semantic-ui-react'
+import { Divider, Button, Accordion } from 'semantic-ui-react'
 import RichTextEditor from 'react-rte'
 import Peer from 'peerjs'
+import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd'
 
 // to generate all types from graphQL schema
 interface IndexPageProps {
@@ -41,7 +42,7 @@ const SudokuImageCanvas = styled.canvas`
   flex: 1;
   top: -0.8px;
   left: -0.8px;
-  pointer-events: none;
+  /* pointer-events: none; */
   z-index: 200;
 `
 
@@ -342,6 +343,7 @@ const getDiff = (
       }
     }
   }
+
   return diff
 }
 
@@ -357,9 +359,11 @@ export default (props: IndexPageProps, context: any) => {
   const [multiSelectedIndices, setMultiSelectedIndices] = useState<{
     [key: string]: Array<number>
   }>({})
+  const [layers, setLayers] = useState([1, 2])
 
   const [pickingMe, setPickingMe] = useState(false)
   const [myColor, setMyColor] = useState('#ffcc00')
+  const [selectorColor, setSelectorColor] = useState('#ffffff')
 
   const peer = useRef<Peer>(null)
   const [onlineId, setOnlineId] = useState('offline')
@@ -367,6 +371,7 @@ export default (props: IndexPageProps, context: any) => {
   const [clientIds, setClientIds] = useState<Array<string>>([])
   const [boardStateIndex, setBoardStateIndex] = useState(0)
   const boardStateIndexRef = useRef(0)
+  const updateBoardRef = useRef(null)
   const [editorText, setEditorText] = useState(
     RichTextEditor.createEmptyValue(),
   )
@@ -392,16 +397,11 @@ export default (props: IndexPageProps, context: any) => {
         update(cellsDraft)
       },
     )
-    console.log('INDEX: ', boardStateIndex)
+    // console.log('INDEX: ', boardStateIndex)
 
-    console.log('REF: ', boardStateIndexRef.current, states.current.length)
-    // states.current.splice(
-    //   boardStateIndexRef.current + 1,
-    //   states.current.length,
-    // )
-    // console.log('STATZ', states.current)
+    // console.log('REF: ', boardStateIndexRef.current, states.current.length)
+    states.current.splice(boardStateIndexRef.current + 1, states.current.length)
     states.current.push(out)
-    // console.log('CLIENTIDS', clientIds)
     if (clientIds.length !== 0) {
       for (let clientId in clientIds) {
         connections[clientIds[clientId]].send({
@@ -411,12 +411,17 @@ export default (props: IndexPageProps, context: any) => {
       }
     } else if (Object.keys(connections).length !== 0) {
       const diff = getDiff(states.current[boardStateIndexRef.current], out)
-      for (let key in connections) {
-        connections[key].send({ type: 'update', diff: diff })
+      console.log('DIFF: ', diff)
+      if (diff !== {}) {
+        for (let key in connections) {
+          connections[key].send({ type: 'update', diff: diff })
+        }
       }
     }
     setBoardStateIndex((boardStateIndex) => boardStateIndex + 1)
   } //,
+  updateBoardRef.current = updateBoard
+
   // [boardStateIndex, connections, clientIds, states.current],
   // )
 
@@ -434,7 +439,7 @@ export default (props: IndexPageProps, context: any) => {
         }))
       } else if (data.type === 'update') {
         console.log(boardStateIndexRef.current, 'CURRENT THING')
-        updateBoard((cells) => {
+        updateBoardRef.current((cells: Array<CellData>) => {
           for (let index in (data as {
             diff: {
               [key: string]: any
@@ -455,35 +460,35 @@ export default (props: IndexPageProps, context: any) => {
     })
   }, [])
 
-  useEffect(() => {
-    peer.current.on('connection', (conn) => {
-      setConnections((connections) => ({
-        ...connections,
-        [conn.peer]: conn,
-      }))
-      conn.on('close', () => {
-        console.log('CLOSING')
-        setConnections((connections) => {
-          let { [conn.peer]: toDel, ...out } = connections
-          return out
-        })
-        setClientIds((ids) => ids.filter((id) => id !== conn.peer)) // Remove id from client id list
+  const connectionCallback = (conn: Peer.DataConnection) => {
+    setConnections((connections) => ({
+      ...connections,
+      [conn.peer]: conn,
+    }))
+    conn.on('close', () => {
+      console.log('CLOSING')
+      setConnections((connections) => {
+        let { [conn.peer]: toDel, ...out } = connections
+        return out
       })
-      conn.on('open', () => {
-        updateBoard(() => {}) //:P
-        conn.on('data', (data) => {
-          hostProcessData(conn, data)
-        })
-        setClientIds((clients) => [...clients, conn.peer])
-        // conn.send({ type: 'pointer', index: index })
-      })
-
-      // conn.send({
-      //   type: 'state',
-      //   state: states.current[boardStateIndexRef.current],
-      // })
+      setClientIds((ids) => ids.filter((id) => id !== conn.peer)) // Remove id from client id list
     })
-  }, [])
+    conn.on('open', () => {
+      updateBoardRef.current(() => {}) //:P
+      conn.on('data', (data) => {
+        hostProcessData(conn, data)
+      })
+      setClientIds((clients) => [...clients, conn.peer])
+      // conn.send({ type: 'pointer', index: index })
+    })
+  }
+
+  useEffect(() => {
+    peer.current.on('connection', connectionCallback)
+    return () => {
+      peer.current.off('connection', connectionCallback)
+    }
+  }, [selectedIndices, boardStateIndex])
 
   const [image, setImage] = useState<{
     leftEdge: number
@@ -492,7 +497,8 @@ export default (props: IndexPageProps, context: any) => {
     bottomEdge: number
     imageData: ImageData | null
   }>({ leftEdge: 0, rightEdge: 0, topEdge: 0, bottomEdge: 0, imageData: null })
-  // const cells = localStorage.states[boardStateIndex]
+  // const cells = localStorage.states[boardStateIndex]  useEffect(() => {
+
   const cells = states.current[boardStateIndex]
 
   const select = (
@@ -500,9 +506,11 @@ export default (props: IndexPageProps, context: any) => {
     event: KeyboardEvent | React.MouseEvent<HTMLDivElement, MouseEvent>,
     multi = false,
   ) => {
-    setSelectorIndex(index)
-    for (let key in connections) {
-      connections[key].send({ type: 'pointer', index: index })
+    if (!event.altKey) {
+      setSelectorIndex(index)
+      for (let key in connections) {
+        connections[key].send({ type: 'pointer', index: index })
+      }
     }
     if (event.ctrlKey) {
       if (selectedIndices.includes(index)) {
@@ -517,37 +525,70 @@ export default (props: IndexPageProps, context: any) => {
           return out
         })
       }
+    } else if (event.shiftKey || multi) {
+      if (
+        typeof selectedIndices.find((value) => value === index) === 'undefined'
+      ) {
+        setSelectedIndices((indices) => {
+          const out = indices.concat(index)
+          for (let key in connections) {
+            connections[key].send({
+              type: 'selected',
+              indices: out,
+            })
+          }
+          return out
+        })
+      }
+    } else if (event.altKey) {
+      // console.log
+      if (!image.imageData) {
+        return
+      }
+      if ('clientX' in event) {
+        const canvas = document.getElementById(
+          'sudoku-image',
+        ) as HTMLCanvasElement
+        const rect = canvas.getBoundingClientRect()
+        const x =
+          ((event.clientX - rect.x) * image.imageData.width) /
+          (rect.right - rect.left)
+        const y =
+          ((event.clientY - rect.y) * image.imageData.height) /
+          (rect.bottom - rect.top)
+        // console.log(
+        //   'COLOR: ',
+        //   x,
+        //   y,
+        //   canvas.getContext('2d').getImageData(x, y, 1, 1).data,
+        // )
+
+        if (canvas.getContext('2d').getImageData(x, y, 1, 1).data[3] === 255) {
+          const newColor = canvas
+            .getContext('2d')
+            .getImageData(x, y, 1, 1)
+            .data.slice(0, 3)
+            .reduce((obj, datum) => obj + datum.toString(16), '#')
+          setSelectorColor(newColor)
+          updateSelected((cell) => {
+            cell.color = newColor
+          })
+        }
+        // canvas.getContext('2d').getImageData(x, y, 1, 1).data
+      }
     } else {
-      if (event.shiftKey || multi) {
-        if (
-          typeof selectedIndices.find((value) => value === index) ===
-          'undefined'
-        ) {
-          setSelectedIndices((indices) => {
-            const out = indices.concat(index)
-            for (let key in connections) {
-              connections[key].send({
-                type: 'selected',
-                indices: out,
-              })
-            }
-            return out
-          })
-        }
-      } else {
-        setSelectedIndices([index])
-        for (let key in connections) {
-          connections[key].send({
-            type: 'selected',
-            indices: [index],
-          })
-        }
+      setSelectedIndices([index])
+      for (let key in connections) {
+        connections[key].send({
+          type: 'selected',
+          indices: [index],
+        })
       }
     }
   }
 
   const updateSelected = (update: (cell: CellData) => void): void => {
-    updateBoard((cells) => {
+    updateBoardRef.current((cells: any) => {
       for (let selected in selectedIndices) {
         update(cells[selectedIndices[selected]])
       }
@@ -717,17 +758,17 @@ export default (props: IndexPageProps, context: any) => {
               [conn.peer]: data.indices,
             }))
           } else if (data.type === 'state') {
-            updateBoard((cells) => {
-              for (let i in cells) {
-                Object.assign(cells[i], data.state[i])
-              }
-            })
+            // updateBoardRef.current((cells: Array<CellData>) => {
+            //   for (let i in cells) {
+            //     Object.assign(cells[i], data.state[i])
+            //   }
+            // })
+            states.current.push(data.state)
+            setBoardStateIndex((index) => index + 1)
 
             // updateBoard(state => rectify)
           }
         }
-
-        // console.log('Received', data)
       })
     })
     setConnections((connections) => ({ ...connections, [hostId]: conn }))
@@ -739,14 +780,10 @@ export default (props: IndexPageProps, context: any) => {
         <GridBackground
           style={image.imageData ? { backgroundColor: '#ffffff' } : {}}
         >
-          {/* 
-            box dimensions: 662*662 browser px
-            imagedata: 
-
-          
-          */}
-
           <SudokuImageCanvas
+            // onClick={(e) => {
+            //   console.log(e)
+            // }}
             id="sudoku-image"
             style={{
               left: image.imageData
@@ -824,18 +861,53 @@ export default (props: IndexPageProps, context: any) => {
       <SidebarContainer>
         <Divider horizontal>Color</Divider>
         <CompactPicker
-          color={
-            pickingMe
-              ? myColor
-              : selectorIndex
-              ? cells[selectorIndex].color
-              : '#000000'
-          }
+          colors={[
+            '#FFFFFF',
+            '#f3c693',
+            '#ff7575',
+            '#FE9200',
+            '#FCDC00',
+            '#f3fb7f',
+            '#DBDF00',
+            '#8cd2b1',
+            '#80EFFF',
+            '#2EEFFF',
+            '#AEA1FF',
+            '#FDA1FF',
+            //
+            '#B3B3B3',
+            '#ffbeb1',
+            '#FF492A',
+            '#E27300',
+            '#FCC400',
+            '#B0BC00',
+            '#A4DD00',
+            '#00FB83',
+            '#68CCCA',
+            '#6AC7FF',
+            '#D579FF',
+            '#FA28FF',
+            //
+            '#000000',
+            '#ef9173',
+            '#ff0000',
+            '#ff4d00',
+            '#FB9E00',
+            '#68BC00',
+            '#00fb1d',
+            '#30C18A',
+            '#16A5A5',
+            '#009CE0',
+            '#7B64FF',
+            '#AB149E',
+          ]}
+          color={pickingMe ? myColor : selectorColor}
           onChangeComplete={(color) => {
             // setColor(color.hex)
             if (pickingMe) {
               setMyColor(color.hex)
             } else {
+              setSelectorColor(color.hex)
               updateSelected((cell) => {
                 cell.color = color.hex
               })
@@ -843,7 +915,7 @@ export default (props: IndexPageProps, context: any) => {
           }}
         />
         <Button
-          onClick={() => {
+          onClick={(event) => {
             setPickingMe((value) => !value)
           }}
           style={{ backgroundColor: myColor }}
@@ -875,6 +947,18 @@ export default (props: IndexPageProps, context: any) => {
           : 'NOT CONNECTED'}
         <Divider horizontal>Notes</Divider>
         <RichTextEditor value={editorText} onChange={setEditorText} />
+        <Accordion>
+          {/* <DragDropContext onDragEnd={() => {}}>
+            <Draggable>
+              <Droppable>
+                <>hi</>
+              </Droppable>
+              <Droppable>
+                <>hello</>
+              </Droppable>
+            </Draggable>
+          </DragDropContext> */}
+        </Accordion>
       </SidebarContainer>
     </PageContainer>
   )
