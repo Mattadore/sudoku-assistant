@@ -1,14 +1,15 @@
 import * as React from 'react'
-import Link from 'gatsby-link'
+// import Link from 'gatsby-link'
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { graphql } from 'gatsby'
 import { CompactPicker } from 'react-color'
 import styled from '@emotion/styled'
 import produce from 'immer'
 import { Divider, Button, Accordion } from 'semantic-ui-react'
-import RichTextEditor from 'react-rte'
+import RichTextEditor, { EditorValue } from 'react-rte'
 import Peer from 'peerjs'
-import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd'
+// import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd'
+import chroma from 'chroma-js'
 
 // to generate all types from graphQL schema
 interface IndexPageProps {
@@ -21,29 +22,39 @@ interface IndexPageProps {
   }
 }
 
-// localStorage.setItem('states', [
-//   Array(81)
-//     .fill(1)
-//     .map((value) => ({
-//       number: null,
-//       center: [],
-//       corner: [],
-//       color: '#ffffff',
-//     })),
-// ])
-// function invertHex(hex: string): string {
-//   return (Number(`0x1${hex}`) ^ 0xffffff).toString(16).substr(1).toUpperCase()
-// }
-
-const SudokuImageCanvas = styled.canvas`
+const SudokuImageCanvas = styled.canvas<{
+  image: {
+    leftEdge: number
+    rightEdge: number
+    topEdge: number
+    bottomEdge: number
+    imageData: ImageData | null
+  }
+}>`
   position: absolute;
   width: 100%;
   height: 100%;
   flex: 1;
-  top: -0.8px;
-  left: -0.8px;
-  /* pointer-events: none; */
-  z-index: 200;
+  pointer-events: none;
+  top: ${({ image }) =>
+    image.imageData
+      ? (-100 * image.topEdge) / (image.bottomEdge - image.topEdge + 1) + '%'
+      : '0px'};
+  left: ${({ image }) =>
+    image.imageData
+      ? (-100 * image.leftEdge) / (image.rightEdge - image.leftEdge + 1) + '%'
+      : '0px'};
+  width: ${({ image }) =>
+    image.imageData
+      ? (100 * image.imageData.width) / (image.rightEdge - image.leftEdge + 1) +
+        '%'
+      : '100%'};
+  height: ${({ image }) =>
+    image.imageData
+      ? (100 * image.imageData.height) /
+          (image.bottomEdge - image.topEdge + 1) +
+        '%'
+      : '100%'};
 `
 
 const PageContainer = styled.div`
@@ -54,8 +65,6 @@ const PageContainer = styled.div`
 `
 
 const SidebarContainer = styled.div`
-  /* display: flex; */
-  /* flex-direction: column; */
   flex: 1;
   max-width: 25rem;
   height: 100%;
@@ -74,15 +83,12 @@ const GridContainer = styled.div`
   align-items: center;
   justify-content: center;
   background-color: #ddddff;
-
-  /* width: 100%; */
   flex: 1;
 `
 
 const GridBackground = styled.div`
   position: relative;
   margin: 0;
-
   padding: 0px;
   background-color: #000000;
   z-index: 0;
@@ -92,8 +98,15 @@ const GridBackground = styled.div`
 const GridCellStyle = styled.div`
   width: 5rem;
   height: 5rem;
-  /* z-index: -; */
 `
+
+const GridCellBackground = styled.div`
+  position: relative;
+  width: 100%;
+  height: 100%;
+  z-index: 200;
+`
+
 const GridCellHighlightedAcross = styled.div`
   z-index: 500;
   top: calc(50% - 2px);
@@ -137,6 +150,7 @@ const CentralNumberContainer = styled.div`
 
 const NumbersContainer = styled.div`
   position: relative;
+  top: -100%;
   width: 100%;
   height: 100%;
   z-index: 5000;
@@ -144,8 +158,6 @@ const NumbersContainer = styled.div`
 
 const GridCellHighlightedUp = styled.div`
   z-index: 500;
-  /* left: calc(50% - 1.25px); */
-  /* top: calc(100% - 10px); */
   left: calc(50% - 2px);
   top: -15px;
   width: 4px;
@@ -158,142 +170,196 @@ interface CellData {
   number: number | null
   center: Array<number>
   corner: Array<number>
-  color: string
+  color: string | null
 }
 
 interface CellDiff {
   number?: number | null
   center?: number[]
   corner?: number[]
-  color?: string
+  color?: string | null
 }
 
 interface GridCellProps {
   index: number
+  imageLoaded: boolean
   data: CellData
-  selector: boolean
-  multiSelector: boolean
-  multiSelected: boolean
-  myColor: string
-  selected: boolean
-  onMouseDown: (event: React.MouseEvent<HTMLDivElement, MouseEvent>) => void
-  onMouseEnter: (event: React.MouseEvent<HTMLDivElement, MouseEvent>) => void
+  selectorColor: string | null
+  selectedColor: string | null
+  select: (
+    index: number,
+    event: KeyboardEvent | React.MouseEvent<HTMLDivElement, MouseEvent>,
+    multi?: boolean,
+  ) => void
   cellGap?: string
   boxGap?: string
 }
 
-const GridCell: React.FC<GridCellProps> = ({
-  index,
-  data,
-  selected,
-  selector,
-  multiSelector,
-  multiSelected,
-  myColor,
-  onMouseDown,
-  onMouseEnter,
-  cellGap = '0px',
-  boxGap = '1.5px',
-}) => {
-  const column = index % 9
-  const row = Math.floor(index / 9)
+const GridCell: React.FC<GridCellProps> = React.memo(
+  ({
+    index,
+    imageLoaded,
+    data,
+    selectedColor,
+    selectorColor,
+    select,
+    cellGap = '0px',
+    boxGap = '1.5px',
+  }) => {
+    const column = index % 9
+    const row = Math.floor(index / 9)
 
-  return (
-    <GridCellStyle
-      onMouseDown={onMouseDown}
-      onMouseEnter={onMouseEnter}
-      style={{
-        backgroundColor: data.color,
-        marginLeft: column % 3 === 0 ? boxGap : cellGap,
-        marginRight: column % 3 === 2 ? boxGap : cellGap,
-        marginTop: row % 3 === 0 ? boxGap : cellGap,
-        marginBottom: row % 3 === 2 ? boxGap : cellGap,
-      }}
-    >
-      {/* <GridCellHighlightedStyle /> */}
-      <NumbersContainer>
-        <CentralNumberContainer
-          style={!data.number ? { fontSize: 12, fontWeight: 'bold' } : {}}
-          className="noselect"
-        >
-          {data.number ? data.number : data.center.join('')}
-        </CentralNumberContainer>
-        {(selector || multiSelector) && (
-          <>
-            <GridCellHighlightedUp
-              style={{ backgroundColor: multiSelector ? '#3388ff' : myColor }}
-            />
-            <GridCellHighlightedAcross
-              style={{ backgroundColor: multiSelector ? '#3388ff' : myColor }}
-            />
-            <GridCellHighlightedUp
-              style={{
-                backgroundColor: multiSelector ? '#3388ff' : myColor,
-                top: '5rem',
-              }}
-            />
-            <GridCellHighlightedAcross
-              style={{
-                backgroundColor: multiSelector ? '#3388ff' : myColor,
-                left: '5em',
-              }}
-            />
-          </>
-        )}
-        {selected && (
-          <>
-            <GridSelectedCircle
-              style={{ backgroundColor: multiSelector ? '#3388ff' : myColor }}
-            />
-          </>
-        )}
-        {multiSelected && (
-          <>
-            <GridSelectedCircle style={{ backgroundColor: '#3388ff' }} />
-          </>
-        )}
-        {!data.number && (
-          <HintNumberTop className="noselect">
-            {data.corner.join('')}
-          </HintNumberTop>
-        )}
-      </NumbersContainer>
-    </GridCellStyle>
-  )
-}
+    return (
+      <GridCellStyle
+        onMouseDown={(e) => {
+          // e.preventDefault()
+          // e.stopPropagation()
+          select(index, e)
+        }}
+        onMouseEnter={(e) => {
+          // console.log()
+          if (e.buttons === 1) {
+            e.preventDefault()
+            e.stopPropagation()
+            select(index, e, true)
+          }
+        }}
+        style={{
+          marginLeft: column % 3 === 0 ? boxGap : cellGap,
+          marginRight: column % 3 === 2 ? boxGap : cellGap,
+          marginTop: row % 3 === 0 ? boxGap : cellGap,
+          marginBottom: row % 3 === 2 ? boxGap : cellGap,
+        }}
+      >
+        <GridCellBackground
+          style={{
+            backgroundColor: data.color
+              ? data.color
+              : imageLoaded
+              ? '#00000000'
+              : '#ffffff',
+          }}
+        />
+        {/* <GridCellHighlightedStyle /> */}
+        <NumbersContainer>
+          <CentralNumberContainer
+            style={!data.number ? { fontSize: 12, fontWeight: 'bold' } : {}}
+            className="noselect"
+          >
+            {data.number ? data.number : data.center.join('')}
+          </CentralNumberContainer>
+          {selectorColor && (
+            <>
+              <GridCellHighlightedUp
+                style={{ backgroundColor: selectorColor }}
+              />
+              <GridCellHighlightedAcross
+                style={{ backgroundColor: selectorColor }}
+              />
+              <GridCellHighlightedUp
+                style={{
+                  backgroundColor: selectorColor,
+                  top: '5rem',
+                }}
+              />
+              <GridCellHighlightedAcross
+                style={{
+                  backgroundColor: selectorColor,
+                  left: '5em',
+                }}
+              />
+            </>
+          )}
+          {selectedColor && (
+            <>
+              <GridSelectedCircle style={{ backgroundColor: selectedColor }} />
+            </>
+          )}
+
+          {!data.number && (
+            <HintNumberTop className="noselect">
+              {data.corner.join('')}
+            </HintNumberTop>
+          )}
+        </NumbersContainer>
+      </GridCellStyle>
+    )
+  },
+)
 
 function getPixel(imgData: ImageData, index: number) {
   return imgData.data.slice(index * 4, index * 4 + 4)
+}
+
+const adjacentIndices = (
+  index: number,
+  x: number,
+  y: number,
+  width: number,
+  height: number,
+) => {
+  let indices = []
+  if (x > 0) {
+    indices.push(index - 1)
+  }
+  if (x < width - 1) {
+    indices.push(index + 1)
+  }
+  if (y > 0) {
+    indices.push(index - width)
+  }
+  if (y < height - 1) {
+    indices.push(index + width)
+  }
+  return indices
 }
 
 const preprocessImage = (imageData: ImageData) => {
   const canvas: HTMLCanvasElement = document.getElementById(
     'sudoku-image',
   ) as HTMLCanvasElement
+  const annotationCanvas: HTMLCanvasElement = document.getElementById(
+    'sudoku-annotations',
+  ) as HTMLCanvasElement
 
   const rows = Array(imageData.height).fill(0)
   const columns = Array(imageData.width).fill(0)
-  let trimLeft = 0,
-    trimRight = 0,
-    trimUp = 0,
-    trimDown = 0
 
   let newData: Uint8ClampedArray = new Uint8ClampedArray([...imageData.data])
 
-  // let newData: Uint8ClampedArray = new Uint8ClampedArray([...imageData.data])
+  // Blacken semi-dark pixels adjacent to black ones
+  // for (let index = 0; index < imageData.data.length / 4; ++index) {
+  //   const x = index % imageData.width
+  //   const y = Math.floor(index / imageData.width)
+  //   const pixelData = getPixel(imageData, index)
+  //   const [hue, saturation, value] = chroma([...pixelData.slice(0, 3)]).hsv()
+  //   if (value < 0.2) {
+  //     //is black
+  //     columns[x] = ++columns[x]
+  //     rows[y] = ++rows[y]
+  //   }
+  //   if (value > 0.8 || (saturation > 0.5 && Math.abs(value - 0.5) < 0.3)) {
+  //     annotationData[index * 4 + 3] = 0
+  //   }
+  // }
+
+  let annotationData: Uint8ClampedArray = new Uint8ClampedArray([...newData])
 
   for (let index = 0; index < imageData.data.length / 4; ++index) {
     const x = index % imageData.width
     const y = Math.floor(index / imageData.width)
     const pixelData = getPixel(imageData, index)
-    const intensity = (pixelData[0] + pixelData[1] + pixelData[2]) / 3
-    if (intensity < 20) {
-      //is blak
+    const [hue, chromaValue, lightness] = chroma([
+      ...pixelData.slice(0, 3),
+    ]).hcl()
+    // const intensity = (pixelData[0] + pixelData[1] + pixelData[2]) / 3
+    if (lightness < 20) {
+      //is black
       columns[x] = ++columns[x]
       rows[y] = ++rows[y]
-    } else if (intensity > 235) {
-      //is whit
-      newData[index * 4 + 3] = 0
+    }
+    if (lightness > 50 && (lightness > 95 || chromaValue > 10)) {
+      annotationData[index * 4 + 3] = 0
     }
   }
 
@@ -310,13 +376,38 @@ const preprocessImage = (imageData: ImageData) => {
   const bottomEdge =
     rows.length - 1 - rows.reverse().findIndex((value) => value > rowMax * 0.8)
 
+  for (let index = 0; index < imageData.data.length / 4; ++index) {
+    const x = index % imageData.width
+    const y = Math.floor(index / imageData.width)
+    const pixelData = getPixel(imageData, index)
+    const [hue, chromaValue, lightness] = chroma([
+      ...pixelData.slice(0, 3),
+    ]).hcl()
+    // const intensity = (pixelData[0] + pixelData[1] + pixelData[2]) / 3
+    if (
+      (x > rightEdge || x < leftEdge || y < topEdge || y > bottomEdge) &&
+      lightness > 95
+    ) {
+      newData[index * 4 + 3] = 0
+    }
+  }
+
   const newImageData = new ImageData(
     new Uint8ClampedArray(newData),
     imageData.width,
   )
+
+  const newAnnotationData = new ImageData(
+    new Uint8ClampedArray(annotationData),
+    imageData.width,
+  )
+
   canvas.height = newImageData.height
   canvas.width = newImageData.width
+  annotationCanvas.height = newAnnotationData.height
+  annotationCanvas.width = newAnnotationData.width
   canvas.getContext('2d').putImageData(newImageData, 0, 0)
+  annotationCanvas.getContext('2d').putImageData(newAnnotationData, 0, 0)
 
   return [leftEdge, rightEdge, topEdge, bottomEdge]
 }
@@ -347,61 +438,126 @@ const getDiff = (
   return diff
 }
 
-export default (props: IndexPageProps, context: any) => {
-  const [selectorIndex, setSelectorIndex] = useState(null)
-  const [multiSelectorIndices, setMultiSelectorIndices] = useState<{
-    [key: string]: number
-  }>({})
-  const [connections, setConnections] = useState<{
-    [key: string]: Peer.DataConnection
-  }>({})
-  const [selectedIndices, setSelectedIndices] = useState([])
-  const [multiSelectedIndices, setMultiSelectedIndices] = useState<{
-    [key: string]: Array<number>
-  }>({})
-  const [layers, setLayers] = useState([1, 2])
+type HostToClientData =
+  | {
+      type: 'state'
+      state: CellData[]
+    }
+  | {
+      type: 'pointer'
+      index: number
+    }
+  | {
+      type: 'selected'
+      indices: number[]
+    }
+  | {
+      type: 'image'
+      file: Blob
+      filetype: string
+    }
 
-  const [pickingMe, setPickingMe] = useState(false)
-  const [myColor, setMyColor] = useState('#ffcc00')
-  const [selectorColor, setSelectorColor] = useState('#ffffff')
+type ClientToHostData =
+  | {
+      type: 'pointer'
+      index: number
+    }
+  | {
+      type: 'selected'
+      indices: number[]
+    }
+  | {
+      type: 'update'
+      diff: { [key: string]: CellDiff }
+    }
 
-  const peer = useRef<Peer>(null)
-  const [onlineId, setOnlineId] = useState('offline')
-  const [hostId, setHostId] = useState('')
-  const [clientIds, setClientIds] = useState<Array<string>>([])
-  const [boardStateIndex, setBoardStateIndex] = useState(0)
-  const boardStateIndexRef = useRef(0)
-  const updateBoardRef = useRef(null)
-  const [editorText, setEditorText] = useState(
-    RichTextEditor.createEmptyValue(),
-  )
-  boardStateIndexRef.current = boardStateIndex
+// type: string
+// index?: number
+// state?: CellData[]
+// indices?: [number]
 
-  const states = useRef<Array<Array<CellData>>>([
+interface PageState {
+  selectorIndex: number
+  multiSelectorIndices: { [key: string]: number }
+  selectedIndices: number[]
+  multiSelectedIndices: { [key: string]: number[] }
+  multiColors: { [key: string]: string }
+  connections: { [key: string]: Peer.DataConnection }
+  pickingMe: boolean
+  myColor: string
+  selectorColor: string
+  editorText: EditorValue
+  boardStateIndex: number
+  onlineId: string
+  hostId: string
+  clientIds: string[]
+  image: {
+    leftEdge: number
+    rightEdge: number
+    topEdge: number
+    bottomEdge: number
+    imageData: ImageData | null
+  }
+  // layers:
+}
+
+class Page extends React.Component<{}, PageState> {
+  state: PageState = {
+    selectorIndex: null,
+    multiSelectorIndices: {},
+    selectedIndices: [],
+    multiSelectedIndices: {},
+    multiColors: {},
+    connections: {},
+    pickingMe: false,
+    myColor: '#ffcc00',
+    selectorColor: '#ffffff',
+    boardStateIndex: 0,
+    editorText: RichTextEditor.createEmptyValue(),
+    onlineId: 'offline',
+    hostId: '',
+    clientIds: [],
+    image: {
+      leftEdge: 0,
+      rightEdge: 0,
+      topEdge: 0,
+      bottomEdge: 0,
+      imageData: null,
+    },
+  }
+
+  peer: Peer | null = null
+  currentHost: string | null = null
+
+  // const [layers, setLayers] = useState([1, 2])
+
+  boardStates: CellData[][] = [
     Array(81)
       .fill(1)
       .map((value) => ({
         number: null,
         center: [],
         corner: [],
-        color: '#ffffff',
+        color: null,
       })),
-  ])
+  ]
+
+  currentFile: Blob | null = null
+  currentFileType: string | null = null
 
   // console.log('CLIENT IDS', clientIds.length)
-  let updateBoard = (update: (method: Array<CellData>) => void): void => {
+  updateBoard = (update: (method: CellData[]) => void): void => {
+    const { boardStateIndex, clientIds, connections } = this.state
     //useCallback(
     const out = produce(
-      states.current[boardStateIndexRef.current],
+      this.boardStates[boardStateIndex],
       (cellsDraft: Array<CellData>) => {
         update(cellsDraft)
       },
     )
-    // console.log('INDEX: ', boardStateIndex)
 
-    // console.log('REF: ', boardStateIndexRef.current, states.current.length)
-    states.current.splice(boardStateIndexRef.current + 1, states.current.length)
-    states.current.push(out)
+    this.boardStates.splice(boardStateIndex + 1, this.boardStates.length)
+    this.boardStates.push(out)
     if (clientIds.length !== 0) {
       for (let clientId in clientIds) {
         connections[clientIds[clientId]].send({
@@ -410,7 +566,7 @@ export default (props: IndexPageProps, context: any) => {
         })
       }
     } else if (Object.keys(connections).length !== 0) {
-      const diff = getDiff(states.current[boardStateIndexRef.current], out)
+      const diff = getDiff(this.boardStates[boardStateIndex], out)
       console.log('DIFF: ', diff)
       if (diff !== {}) {
         for (let key in connections) {
@@ -418,126 +574,124 @@ export default (props: IndexPageProps, context: any) => {
         }
       }
     }
-    setBoardStateIndex((boardStateIndex) => boardStateIndex + 1)
-  } //,
-  updateBoardRef.current = updateBoard
+    this.setState((state) => ({ boardStateIndex: state.boardStateIndex + 1 }))
+  }
 
-  // [boardStateIndex, connections, clientIds, states.current],
-  // )
-
-  const hostProcessData = (conn: Peer.DataConnection, data: any) => {
+  // Process data from clients
+  hostProcessData = (conn: Peer.DataConnection, data: ClientToHostData) => {
+    const { boardStateIndex } = this.state
     if (data && typeof data !== 'string' && 'type' in data) {
       if (data.type === 'pointer') {
-        setMultiSelectorIndices((indices) => ({
-          ...indices,
-          [conn.peer]: data.index,
+        this.setState((state) => ({
+          multiSelectorIndices: {
+            ...state.multiSelectorIndices,
+            [conn.peer]: data.index,
+          },
         }))
       } else if (data.type === 'selected') {
-        setMultiSelectedIndices((indices) => ({
-          ...indices,
-          [conn.peer]: data.indices,
+        this.setState((state) => ({
+          multiSelectedIndices: {
+            ...state.multiSelectedIndices,
+            [conn.peer]: data.indices,
+          },
         }))
       } else if (data.type === 'update') {
-        console.log(boardStateIndexRef.current, 'CURRENT THING')
-        updateBoardRef.current((cells: Array<CellData>) => {
-          for (let index in (data as {
-            diff: {
-              [key: string]: any
-            }
-          }).diff) {
+        this.updateBoard((cells: Array<CellData>) => {
+          for (let index in data.diff) {
             Object.assign(cells[parseInt(index)], data.diff[index])
           }
         })
-        // states.current.push(states.current[boardStateIndexRef.current])
       }
     }
   }
 
-  useEffect(() => {
-    peer.current = new Peer()
-    peer.current.on('open', (id) => {
-      setOnlineId(id)
-    })
-  }, [])
-
-  const connectionCallback = (conn: Peer.DataConnection) => {
-    setConnections((connections) => ({
-      ...connections,
-      [conn.peer]: conn,
+  // HOST connection setup
+  connectionCallback = (conn: Peer.DataConnection) => {
+    this.setState((state) => ({
+      connections: {
+        ...state.connections,
+        [conn.peer]: conn,
+      },
     }))
     conn.on('close', () => {
       console.log('CLOSING')
-      setConnections((connections) => {
-        let { [conn.peer]: toDel, ...out } = connections
-        return out
+      this.setState((state) => {
+        let { [conn.peer]: toDel, ...out } = state.connections
+        return {
+          connections: out,
+          clientIds: state.clientIds.filter((id) => id !== conn.peer),
+        }
       })
-      setClientIds((ids) => ids.filter((id) => id !== conn.peer)) // Remove id from client id list
     })
+    //When we have a client joining our hosted session
     conn.on('open', () => {
-      updateBoardRef.current(() => {}) //:P
-      conn.on('data', (data) => {
-        hostProcessData(conn, data)
+      conn.send({
+        type: 'state',
+        state: this.boardStates[this.state.boardStateIndex],
       })
-      setClientIds((clients) => [...clients, conn.peer])
+      if (this.state.selectorIndex) {
+        conn.send({
+          type: 'pointer',
+          index: this.state.selectorIndex,
+        })
+      }
+      conn.send({
+        type: 'selected',
+        indices: this.state.selectedIndices,
+      })
+      if (this.currentFile) {
+        conn.send({
+          type: 'image',
+          file: this.currentFile,
+          filetype: this.currentFileType,
+        })
+      }
+      conn.on('data', (data) => {
+        this.hostProcessData(conn, data)
+      })
+      this.setState((state) => ({ clientIds: [...state.clientIds, conn.peer] }))
       // conn.send({ type: 'pointer', index: index })
     })
   }
 
-  useEffect(() => {
-    peer.current.on('connection', connectionCallback)
-    return () => {
-      peer.current.off('connection', connectionCallback)
-    }
-  }, [selectedIndices, boardStateIndex])
-
-  const [image, setImage] = useState<{
-    leftEdge: number
-    rightEdge: number
-    topEdge: number
-    bottomEdge: number
-    imageData: ImageData | null
-  }>({ leftEdge: 0, rightEdge: 0, topEdge: 0, bottomEdge: 0, imageData: null })
-  // const cells = localStorage.states[boardStateIndex]  useEffect(() => {
-
-  const cells = states.current[boardStateIndex]
-
-  const select = (
+  select = (
     index: number,
     event: KeyboardEvent | React.MouseEvent<HTMLDivElement, MouseEvent>,
     multi = false,
   ) => {
+    const { connections, selectedIndices, image } = this.state
     if (!event.altKey) {
-      setSelectorIndex(index)
+      this.setState({ selectorIndex: index })
       for (let key in connections) {
         connections[key].send({ type: 'pointer', index: index })
       }
     }
     if (event.ctrlKey) {
       if (selectedIndices.includes(index)) {
-        setSelectedIndices((indices) => {
-          const out = indices.filter((value) => value !== index)
+        this.setState((state) => {
+          const out = state.selectedIndices.filter((value) => value !== index)
           for (let key in connections) {
             connections[key].send({
               type: 'selected',
               indices: out,
             })
           }
-          return out
+          return { selectedIndices: out }
         })
       }
     } else if (event.shiftKey || multi) {
       if (
         typeof selectedIndices.find((value) => value === index) === 'undefined'
       ) {
-        setSelectedIndices((indices) => {
-          const out = indices.concat(index)
+        this.setState((state) => {
+          const out = state.selectedIndices.concat(index)
           for (let key in connections) {
             connections[key].send({
               type: 'selected',
               indices: out,
             })
           }
-          return out
+          return { selectedIndices: out }
         })
       }
     } else if (event.altKey) {
@@ -550,34 +704,31 @@ export default (props: IndexPageProps, context: any) => {
           'sudoku-image',
         ) as HTMLCanvasElement
         const rect = canvas.getBoundingClientRect()
-        const x =
+        const x = Math.round(
           ((event.clientX - rect.x) * image.imageData.width) /
-          (rect.right - rect.left)
-        const y =
+            (rect.right - rect.left),
+        )
+        const y = Math.round(
           ((event.clientY - rect.y) * image.imageData.height) /
-          (rect.bottom - rect.top)
-        // console.log(
-        //   'COLOR: ',
-        //   x,
-        //   y,
-        //   canvas.getContext('2d').getImageData(x, y, 1, 1).data,
-        // )
+            (rect.bottom - rect.top),
+        )
 
         if (canvas.getContext('2d').getImageData(x, y, 1, 1).data[3] === 255) {
-          const newColor = canvas
-            .getContext('2d')
-            .getImageData(x, y, 1, 1)
-            .data.slice(0, 3)
-            .reduce((obj, datum) => obj + datum.toString(16), '#')
-          setSelectorColor(newColor)
-          updateSelected((cell) => {
-            cell.color = newColor
+          const color = chroma([
+            ...canvas
+              .getContext('2d')
+              .getImageData(x, y, 1, 1)
+              .data.slice(0, 3),
+          ])
+          console.log('HSV:', color.hsv(), 'HCL:', color.hcl())
+          this.setState({ selectorColor: color.hex() })
+          this.updateSelected((cell) => {
+            cell.color = color.hex()
           })
         }
-        // canvas.getContext('2d').getImageData(x, y, 1, 1).data
       }
     } else {
-      setSelectedIndices([index])
+      this.setState({ selectedIndices: [index] })
       for (let key in connections) {
         connections[key].send({
           type: 'selected',
@@ -587,277 +738,285 @@ export default (props: IndexPageProps, context: any) => {
     }
   }
 
-  const updateSelected = (update: (cell: CellData) => void): void => {
-    updateBoardRef.current((cells: any) => {
+  updateSelected = (update: (cell: CellData) => void): void => {
+    const { selectedIndices } = this.state
+    this.updateBoard((cells: any) => {
       for (let selected in selectedIndices) {
         update(cells[selectedIndices[selected]])
       }
     })
   }
 
-  useEffect(() => {
-    const keyCallback = (event: KeyboardEvent) => {
-      // Use regex to test if digit btwn 1-9
+  keyCallback = (event: KeyboardEvent) => {
+    const { selectorIndex, boardStateIndex, connections } = this.state
+    if (selectorIndex === null) {
+      return
+    }
+    // Use regex to test if digit btwn 1-9
+    if (/[1-9]/.test(event.key) || /[!@#$%^&*(]/.test(event.key)) {
+      if (event.altKey || event.ctrlKey) {
+        //shit so annoying
+        event.preventDefault()
+      }
 
-      if (
-        /[1-9]/.test(event.key) ||
-        (/[!@#$%^&*(]/.test(event.key) && selectorIndex !== null)
-      ) {
-        if (event.altKey || event.ctrlKey) {
-          //shit so annoying
+      if (event.altKey) {
+        this.updateSelected((cell) => {
+          if (!cell.corner.includes(parseInt(event.key))) {
+            cell.corner.push(parseInt(event.key))
+            cell.corner.sort()
+          } else {
+            cell.corner = cell.corner.filter(
+              (value) => parseInt(event.key) !== value,
+            )
+            cell.corner.sort()
+          }
+        })
+      } else if (event.shiftKey) {
+        let convertShift = ['!', '@', '#', '$', '%', '^', '&', '*', '(']
+        let shiftedKey = convertShift.indexOf(event.key) + 1
+        this.updateSelected((cell) => {
+          if (!cell.center.includes(shiftedKey)) {
+            cell.center.push(shiftedKey)
+            cell.center.sort()
+          } else {
+            cell.center = cell.center.filter((value) => shiftedKey !== value)
+            cell.center.sort()
+          }
+        })
+      } else {
+        this.updateSelected((cell) => {
+          if (cell.number !== parseInt(event.key)) {
+            cell.number = parseInt(event.key)
+          } else {
+            cell.number = null
+          }
+        })
+      }
+      //if it is a digit
+      return
+    }
+
+    switch (event.key) {
+      case 'y':
+        if (
+          !this.currentHost &&
+          event.ctrlKey &&
+          boardStateIndex < this.boardStates.length - 1
+        ) {
+          this.setState({
+            boardStateIndex: boardStateIndex + 1,
+          })
+          for (let clientId in this.state.clientIds) {
+            connections[this.state.clientIds[clientId]].send({
+              type: 'state',
+              state: this.boardStates[boardStateIndex + 1],
+            })
+          }
+        }
+        break
+      case 'z':
+        if (!this.currentHost && event.ctrlKey && boardStateIndex > 0) {
+          this.setState((state) => ({
+            boardStateIndex: state.boardStateIndex - 1,
+          }))
+          for (let clientId in this.state.clientIds) {
+            connections[this.state.clientIds[clientId]].send({
+              type: 'state',
+              state: this.boardStates[boardStateIndex - 1],
+            })
+          }
+        }
+        break
+      case 'a':
+        if (event.ctrlKey) {
           event.preventDefault()
+          // equiv to [0..80]
+          const allIndices = Array(81)
+            .fill(0)
+            .map((v, index) => index)
+          this.setState({
+            selectedIndices: allIndices,
+          })
+          for (let key in connections) {
+            connections[key].send({
+              type: 'selected',
+              indices: allIndices,
+            })
+          }
         }
-        // setCells((cells) => {
-        //   let newCells = [...cells]
-        //   newCells[selectorIndex].number = parseInt(event.key)
-        //   return newCells
-        // })
-        if (event.altKey) {
-          updateSelected((cell) => {
-            if (!cell.corner.includes(parseInt(event.key))) {
-              cell.corner.push(parseInt(event.key))
-              cell.corner.sort()
-            } else {
-              cell.corner = cell.corner.filter(
-                (value) => parseInt(event.key) !== value,
-              )
-              cell.corner.sort()
-            }
-          })
-        } else if (event.shiftKey) {
-          let convertShift = ['!', '@', '#', '$', '%', '^', '&', '*', '(']
-          let shiftedKey = convertShift.indexOf(event.key) + 1
-          updateSelected((cell) => {
-            if (!cell.center.includes(shiftedKey)) {
-              cell.center.push(shiftedKey)
-              cell.center.sort()
-            } else {
-              cell.center = cell.center.filter((value) => shiftedKey !== value)
-              cell.center.sort()
-            }
-          })
-        } else {
-          updateSelected((cell) => {
-            if (cell.number !== parseInt(event.key)) {
-              cell.number = parseInt(event.key)
-            } else {
-              cell.number = null
-            }
-          })
+        break
+      case 'ArrowLeft':
+        if (selectorIndex % 9 > 0) {
+          this.select(selectorIndex - 1, event)
         }
-        //if it is a digit
-        return
-      }
-
-      switch (event.key) {
-        case 'y':
-          if (event.ctrlKey && boardStateIndex < states.current.length - 1) {
-            setBoardStateIndex(boardStateIndex + 1)
+        break
+      case 'ArrowRight':
+        if (selectorIndex % 9 < 8) {
+          this.select(selectorIndex + 1, event)
+        }
+        break
+      case 'ArrowUp':
+        if (selectorIndex > 8) {
+          this.select(selectorIndex - 9, event)
+        }
+        break
+      case 'ArrowDown':
+        if (selectorIndex < 72) {
+          this.select(selectorIndex + 9, event)
+        }
+        break
+      case 'Delete':
+        this.updateSelected((cell) => {
+          if (cell.number) {
+            cell.number = null
+          } else if (cell.corner.length !== 0 || cell.center.length !== 0) {
+            cell.corner = []
+            cell.center = []
+          } else {
+            cell.color = null
           }
-          break
-        case 'z':
-          if (event.ctrlKey && boardStateIndex > 0) {
-            setBoardStateIndex(boardStateIndex - 1)
-          }
-          break
-        case 'ArrowLeft':
-          if (selectorIndex % 9 > 0) {
-            select(selectorIndex - 1, event)
-          }
-          break
-        case 'ArrowRight':
-          if (selectorIndex % 9 < 8) {
-            select(selectorIndex + 1, event)
-          }
-          break
-        case 'ArrowUp':
-          if (selectorIndex > 8) {
-            select(selectorIndex - 9, event)
-          }
-          break
-        case 'ArrowDown':
-          if (selectorIndex < 72) {
-            select(selectorIndex + 9, event)
-          }
-          break
-        case 'Delete':
-          updateSelected((cell) => {
-            if (cell.number) {
-              cell.number = null
-            } else if (cell.corner.length !== 0 || cell.center.length !== 0) {
-              cell.corner = []
-              cell.center = []
-            } else {
-              cell.color = '#ffffff'
-            }
-          })
-          break
-      }
+        })
+        break
     }
+  }
 
-    document.addEventListener('keydown', keyCallback)
-    return () => {
-      document.removeEventListener('keydown', keyCallback)
-    }
-  }, [selectorIndex, selectedIndices, boardStateIndex])
-
-  const fileLoad: (event: React.ChangeEvent<HTMLInputElement>) => void = (
-    event,
-  ) => {
+  fileInput = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const { connections } = this.state
     if (event.target.files.length) {
       const file = event.target.files[0]
-      const canvas = document.getElementById(
-        'sudoku-image',
-      ) as HTMLCanvasElement
-      // const drawCanvas = document.createElement('canvas')
-      const image = new Image()
-      const url = URL.createObjectURL(file)
-      image.src = url
-
-      image.onload = function () {
-        URL.revokeObjectURL(url)
-        const context = canvas.getContext('2d')
-        canvas.width = image.width
-        canvas.height = image.height
-        context.drawImage(image, 0, 0)
-        const imageData = context.getImageData(
-          0,
-          0,
-          canvas.width,
-          canvas.height,
-        )
-        const [leftEdge, rightEdge, topEdge, bottomEdge] = preprocessImage(
-          imageData,
-        )
-        setImage({ leftEdge, rightEdge, topEdge, bottomEdge, imageData })
+      const blob = new Blob([file], { type: file.type })
+      this.currentFile = blob
+      this.currentFileType = file.type
+      for (let key in connections) {
+        connections[key].send({
+          type: 'image',
+          file: blob,
+          // name: file.name,
+          filetype: file.type,
+        })
       }
+      this.imageLoad(blob)
     }
   }
 
-  interface hostToClientData {
-    type: string
-    index?: number
-    state?: CellData[]
-    indices?: [number]
+  imageLoad = (file: Blob) => {
+    const canvas = document.getElementById('sudoku-image') as HTMLCanvasElement
+
+    const image = new Image()
+    const url = URL.createObjectURL(file)
+    image.src = url
+
+    image.onload = () => {
+      URL.revokeObjectURL(url)
+      const context = canvas.getContext('2d')
+      canvas.width = image.width
+      canvas.height = image.height
+      context.drawImage(image, 0, 0)
+      const imageData = context.getImageData(0, 0, canvas.width, canvas.height)
+      const [leftEdge, rightEdge, topEdge, bottomEdge] = preprocessImage(
+        imageData,
+      )
+      this.setState({
+        image: { leftEdge, rightEdge, topEdge, bottomEdge, imageData },
+      })
+    }
   }
 
-  const initiateClient = () => {
-    const conn = peer.current.connect(hostId)
+  // CLIENT connection setup
+  initiateClient = () => {
+    this.currentHost = this.state.hostId
+    const conn = this.peer.connect(this.currentHost)
+    //When we join a remote server
     conn.on('open', () => {
-      conn.send('hello')
-      conn.on('data', (data: hostToClientData) => {
+      // conn.send({type: "pointerColor", color: this.state.myColor})
+      conn.on('data', (data: HostToClientData) => {
         if (data && typeof data !== 'string' && 'type' in data) {
           if (data.type === 'pointer') {
-            setMultiSelectorIndices((indices) => ({
-              ...indices,
-              [conn.peer]: data.index,
+            this.setState((state) => ({
+              multiSelectorIndices: {
+                ...state.multiSelectorIndices,
+                [conn.peer]: data.index,
+              },
             }))
           } else if (data.type === 'selected') {
-            setMultiSelectedIndices((indices) => ({
-              ...indices,
-              [conn.peer]: data.indices,
+            this.setState((state) => ({
+              multiSelectedIndices: {
+                ...state.multiSelectedIndices,
+                [conn.peer]: data.indices,
+              },
             }))
           } else if (data.type === 'state') {
-            // updateBoardRef.current((cells: Array<CellData>) => {
-            //   for (let i in cells) {
-            //     Object.assign(cells[i], data.state[i])
-            //   }
-            // })
-            states.current.push(data.state)
-            setBoardStateIndex((index) => index + 1)
-
-            // updateBoard(state => rectify)
+            this.boardStates.push(data.state)
+            this.setState((state) => ({
+              boardStateIndex: state.boardStateIndex + 1,
+            }))
+          } else if (data.type === 'image') {
+            const blob = new Blob([data.file], { type: data.filetype })
+            this.currentFile = blob
+            this.imageLoad(blob)
           }
         }
       })
     })
-    setConnections((connections) => ({ ...connections, [hostId]: conn }))
+    this.setState((state) => ({
+      connections: {
+        ...state.connections,
+        [this.currentHost]: conn,
+      },
+    }))
   }
 
-  return (
-    <PageContainer>
-      <GridContainer>
-        <GridBackground
-          style={image.imageData ? { backgroundColor: '#ffffff' } : {}}
-        >
-          <SudokuImageCanvas
-            // onClick={(e) => {
-            //   console.log(e)
-            // }}
-            id="sudoku-image"
-            style={{
-              left: image.imageData
-                ? `-${
-                    (100 * image.leftEdge) /
-                    (image.rightEdge - image.leftEdge + 1)
-                  }%`
-                : '0px',
-              top: image.imageData
-                ? `-${
-                    (100 * image.topEdge) /
-                    (image.bottomEdge - image.topEdge + 1)
-                  }%`
-                : '0px',
-              width: image.imageData
-                ? `${
-                    (100 * image.imageData.width) /
-                    (image.rightEdge - image.leftEdge + 1)
-                  }%`
-                : '100%',
-              height: image.imageData
-                ? `${
-                    (100 * image.imageData.height) /
-                    (image.bottomEdge - image.topEdge + 1)
-                  }%`
-                : '100%',
-            }}
-          />
-          {/* <SudokuImafno */}
-          {states.current[boardStateIndex] && (
-            <SudokuGrid style={{ padding: image.imageData ? '1px' : '2px' }}>
-              {(states.current[boardStateIndex] as Array<CellData>).map(
-                (cell, index) => (
-                  <GridCell
-                    myColor={myColor}
-                    onMouseDown={(e) => {
-                      // e.preventDefault()
-                      // e.stopPropagation()
-                      select(index, e)
-                    }}
-                    onMouseEnter={(e) => {
-                      if (e.buttons === 1) {
-                        e.preventDefault()
-                        e.stopPropagation()
-                        select(index, e, true)
-                      }
-                    }}
-                    boxGap={image.imageData ? '1px' : '2px'}
-                    cellGap={image.imageData ? '0px' : '1px'}
-                    key={index}
-                    selected={
-                      // Check if in the list
-                      selectedIndices.includes(index)
-                    }
-                    multiSelected={
-                      typeof Object.keys(multiSelectedIndices).find((i) =>
-                        multiSelectedIndices[i].includes(index),
-                      ) !== 'undefined'
-                    }
-                    selector={selectorIndex === index}
-                    multiSelector={
-                      typeof Object.keys(multiSelectorIndices).find(
-                        (key) => multiSelectorIndices[key] === index,
-                      ) !== 'undefined'
-                    }
-                    data={cell}
-                    index={index}
-                  />
-                ),
-              )}
-            </SudokuGrid>
-          )}
-        </GridBackground>
-      </GridContainer>
+  pageClicked = () => {
+    const { connections } = this.state
+    // console.log('deselect')
+    this.setState({ selectorIndex: null })
+    for (let key in connections) {
+      connections[key].send({ type: 'pointer', index: null })
+    }
+  }
+
+  componentDidMount = () => {
+    const id = localStorage.getItem('id')
+    this.peer = id ? new Peer(id) : new Peer()
+    this.peer.on('open', (id) => {
+      localStorage.id = id
+      this.setState({ onlineId: id })
+    })
+    this.peer.on('connection', this.connectionCallback)
+    window.addEventListener('keydown', this.keyCallback)
+    window.addEventListener('mousedown', this.pageClicked)
+  }
+
+  componentWillUnmount = () => {
+    this.peer.off('connection', this.connectionCallback)
+    window.removeEventListener('keydown', this.keyCallback)
+    window.removeEventListener('mousedown', this.pageClicked)
+  }
+
+  setEditorText = (text: EditorValue) => {
+    this.setState({ editorText: text })
+  }
+
+  Sidebar = React.memo(
+    ({
+      pickingMe,
+      myColor,
+      selectorColor,
+      onlineId,
+      hostId,
+      clientIds,
+      connections,
+      editorText,
+    }: {
+      pickingMe: boolean
+      myColor: string
+      selectorColor: string
+      onlineId: string
+      hostId: string
+      clientIds: string[]
+      connections: { [key: string]: Peer.DataConnection }
+      editorText: EditorValue
+    }) => (
       <SidebarContainer>
         <Divider horizontal>Color</Divider>
         <CompactPicker
@@ -905,10 +1064,10 @@ export default (props: IndexPageProps, context: any) => {
           onChangeComplete={(color) => {
             // setColor(color.hex)
             if (pickingMe) {
-              setMyColor(color.hex)
+              this.setState({ myColor: color.hex })
             } else {
-              setSelectorColor(color.hex)
-              updateSelected((cell) => {
+              this.setState({ selectorColor: color.hex })
+              this.updateSelected((cell) => {
                 cell.color = color.hex
               })
             }
@@ -916,53 +1075,151 @@ export default (props: IndexPageProps, context: any) => {
         />
         <Button
           onClick={(event) => {
-            setPickingMe((value) => !value)
+            this.setState((state) => ({ pickingMe: !state.pickingMe }))
           }}
           style={{ backgroundColor: myColor }}
         >
           {pickingMe ? 'Picking my color...' : 'Pick my color'}{' '}
         </Button>
         <Divider horizontal>File</Divider>
-        <input type="file" id="upload-button" onChange={fileLoad} />
+        <input type="file" id="upload-button" onChange={this.fileInput} />
         <Divider horizontal>Multiplayer</Divider>
-        {onlineId}
-        <input
-          // type="text"
-          onKeyDown={(event) => {
-            if (event.key === 'Enter') {
-              initiateClient()
-            }
-          }}
-          onChange={(event) => {
-            setHostId(event.target.value)
-          }}
-          value={hostId}
-        />
-        {hostId}
-        {clientIds.join(', ')}{' '}
-        {connections !== {}
-          ? clientIds.length !== 0
-            ? 'HOST'
-            : 'CLIENT'
-          : 'NOT CONNECTED'}
+        ID: {onlineId} <br />
+        <span>
+          <input
+            // type="text"
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                this.initiateClient()
+              }
+            }}
+            onChange={(event) => {
+              this.setState({ hostId: event.target.value })
+            }}
+            value={hostId}
+          />
+          <span style={{ float: 'right' }}>
+            {Object.keys(connections).length !== 0
+              ? clientIds.length !== 0
+                ? 'HOST'
+                : 'CLIENT'
+              : 'NOT CONNECTED'}
+          </span>
+        </span>
+        <br />
+        {this.currentHost && 'Host is: ' + this.currentHost}
+        {clientIds.length !== 0 && 'Clients are: ' + clientIds.join(', ')}
         <Divider horizontal>Notes</Divider>
-        <RichTextEditor value={editorText} onChange={setEditorText} />
+        <RichTextEditor value={editorText} onChange={this.setEditorText} />
         <Accordion>
           {/* <DragDropContext onDragEnd={() => {}}>
-            <Draggable>
-              <Droppable>
-                <>hi</>
-              </Droppable>
-              <Droppable>
-                <>hello</>
-              </Droppable>
-            </Draggable>
-          </DragDropContext> */}
+    <Draggable>
+      <Droppable>
+        <>hi</>
+      </Droppable>
+      <Droppable>
+        <>hello</>
+      </Droppable>
+    </Draggable>
+  </DragDropContext> */}
         </Accordion>
       </SidebarContainer>
-    </PageContainer>
+    ),
   )
+
+  render = () => {
+    // I just like this pattern, idk. typing "this.state.<prop>" gets annoying
+    const {
+      image,
+      boardStateIndex,
+      myColor,
+      pickingMe,
+      onlineId,
+      selectedIndices,
+      selectorIndex,
+      selectorColor,
+      multiSelectedIndices,
+      multiSelectorIndices,
+      hostId,
+      clientIds,
+      connections,
+      editorText,
+    } = this.state
+    return (
+      <PageContainer>
+        <GridContainer>
+          <GridBackground
+            style={image.imageData ? { backgroundColor: '#ffffff' } : {}}
+            onMouseDown={(e) => {
+              //Stop click event from propagating to window, used for deselect checking
+              e.stopPropagation()
+            }}
+          >
+            {/* <SudokuImafno */}
+            <SudokuImageCanvas
+              style={{ zIndex: 300 }}
+              image={image}
+              id="sudoku-annotations"
+            />
+            <SudokuImageCanvas
+              style={{ zIndex: 200 }}
+              image={image}
+              id="sudoku-image"
+            />
+            {this.boardStates[boardStateIndex] && (
+              <SudokuGrid style={{ padding: image.imageData ? '1px' : '2px' }}>
+                {(this.boardStates[boardStateIndex] as Array<CellData>).map(
+                  (cell, index) => (
+                    <GridCell
+                      select={this.select}
+                      boxGap={image.imageData ? '1px' : '2px'}
+                      cellGap={image.imageData ? '0px' : '1px'}
+                      key={index}
+                      selectedColor={
+                        // Check if in the list
+                        selectedIndices.includes(index)
+                          ? myColor
+                          : typeof Object.keys(multiSelectedIndices).find((i) =>
+                              multiSelectedIndices[i].includes(index),
+                            ) !== 'undefined'
+                          ? '#3388ff'
+                          : null
+                      }
+                      selectorColor={
+                        selectorIndex === index
+                          ? myColor
+                          : typeof Object.keys(multiSelectorIndices).find(
+                              (key) => multiSelectorIndices[key] === index,
+                            ) !== 'undefined'
+                          ? '#3388ff'
+                          : null
+                      }
+                      data={cell}
+                      index={index}
+                      imageLoaded={!!image.imageData}
+                    />
+                  ),
+                )}
+              </SudokuGrid>
+            )}
+          </GridBackground>
+        </GridContainer>
+        <this.Sidebar
+          pickingMe={pickingMe}
+          myColor={myColor}
+          selectorColor={selectorColor}
+          onlineId={onlineId}
+          hostId={hostId}
+          clientIds={clientIds}
+          connections={connections}
+          editorText={editorText}
+        />
+      </PageContainer>
+    )
+  }
 }
+
+export default Page
 
 export const pageQuery = graphql`
   query IndexQuery {
