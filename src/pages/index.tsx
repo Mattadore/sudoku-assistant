@@ -416,6 +416,7 @@ const preprocessImage = (imageData: ImageData) => {
 
 // }
 
+// get a differential tree btwn two states
 const getDiff = (
   starting: CellData[],
   updated: CellData[],
