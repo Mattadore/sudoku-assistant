@@ -173,12 +173,7 @@ interface CellData {
   color: string | null
 }
 
-interface CellDiff {
-  number?: number | null
-  center?: number[]
-  corner?: number[]
-  color?: string | null
-}
+type CellDiff = Partial<CellData>
 
 interface GridCellProps {
   index: number
@@ -193,6 +188,7 @@ interface GridCellProps {
   ) => void
   cellGap?: string
   boxGap?: string
+  conflict: boolean
 }
 
 const GridCell: React.FC<GridCellProps> = React.memo(
@@ -205,10 +201,14 @@ const GridCell: React.FC<GridCellProps> = React.memo(
     select,
     cellGap = '0px',
     boxGap = '1.5px',
+    conflict,
   }) => {
+    console.log(conflict)
+    if (conflict !== undefined) {
+      console.log('woop')
+    }
     const column = index % 9
     const row = Math.floor(index / 9)
-
     return (
       <GridCellStyle
         onMouseDown={(e) => {
@@ -243,7 +243,16 @@ const GridCell: React.FC<GridCellProps> = React.memo(
         {/* <GridCellHighlightedStyle /> */}
         <NumbersContainer>
           <CentralNumberContainer
-            style={!data.number ? { fontSize: 12, fontWeight: 'bold' } : {}}
+            style={
+              !data.number
+                ? {
+                    fontSize: 12,
+                    fontWeight: 'bold',
+                  }
+                : conflict !== undefined && conflict
+                ? { color: '#AC3235', fontWeight: 'bold' }
+                : {}
+            }
             className="noselect"
           >
             {data.number ? data.number : data.center.join('')}
@@ -445,12 +454,16 @@ type HostToClientData =
       state: CellData[]
     }
   | {
-      type: 'pointer'
-      index: number
+      type: 'pointerMap'
+      indexMap: { [connectionKey: string]: number }
     }
   | {
-      type: 'selected'
-      indices: number[]
+      type: 'colorMap'
+      colorMap: { [connectionKey: string]: string }
+    }
+  | {
+      type: 'selectedMap'
+      indicesMap: { [connectionKey: string]: number[] }
     }
   | {
       type: 'image'
@@ -471,6 +484,10 @@ type ClientToHostData =
       type: 'update'
       diff: { [key: string]: CellDiff }
     }
+  | {
+      type: 'color'
+      color: string
+    }
 
 // type: string
 // index?: number
@@ -484,6 +501,7 @@ interface PageState {
   multiSelectedIndices: { [key: string]: number[] }
   multiColors: { [key: string]: string }
   connections: { [key: string]: Peer.DataConnection }
+  conflicts: boolean[]
   pickingMe: boolean
   myColor: string
   selectorColor: string
@@ -510,8 +528,10 @@ class Page extends React.Component<{}, PageState> {
     multiSelectedIndices: {},
     multiColors: {},
     connections: {},
+    conflicts: [],
     pickingMe: false,
-    myColor: '#ffcc00',
+    myColor:
+      typeof localStorage.color === 'string' ? localStorage.color : '#ffcc00',
     selectorColor: '#ffffff',
     boardStateIndex: 0,
     editorText: RichTextEditor.createEmptyValue(),
@@ -575,12 +595,13 @@ class Page extends React.Component<{}, PageState> {
         }
       }
     }
+
     this.setState((state) => ({ boardStateIndex: state.boardStateIndex + 1 }))
   }
 
   // Process data from clients
   hostProcessData = (conn: Peer.DataConnection, data: ClientToHostData) => {
-    const { boardStateIndex } = this.state
+    const { boardStateIndex, connections, onlineId } = this.state
     if (data && typeof data !== 'string' && 'type' in data) {
       if (data.type === 'pointer') {
         this.setState((state) => ({
@@ -589,6 +610,12 @@ class Page extends React.Component<{}, PageState> {
             [conn.peer]: data.index,
           },
         }))
+        for (let client in connections) {
+          connections[client].send({
+            type: 'pointerMap',
+            indexMap: { [conn.peer]: data.index },
+          } as HostToClientData)
+        }
       } else if (data.type === 'selected') {
         this.setState((state) => ({
           multiSelectedIndices: {
@@ -596,12 +623,31 @@ class Page extends React.Component<{}, PageState> {
             [conn.peer]: data.indices,
           },
         }))
+        for (let client in connections) {
+          connections[client].send({
+            type: 'selectedMap',
+            indicesMap: { [conn.peer]: data.indices },
+          } as HostToClientData)
+        }
       } else if (data.type === 'update') {
         this.updateBoard((cells: Array<CellData>) => {
           for (let index in data.diff) {
             Object.assign(cells[parseInt(index)], data.diff[index])
           }
         })
+      } else if (data.type === 'color') {
+        this.setState((state) => ({
+          multiColors: {
+            ...state.multiColors,
+            [conn.peer]: data.color,
+          },
+        }))
+        for (let client in connections) {
+          connections[client].send({
+            type: 'colorMap',
+            colorMap: { [conn.peer]: data.color },
+          } as HostToClientData)
+        }
       }
     }
   }
@@ -629,23 +675,36 @@ class Page extends React.Component<{}, PageState> {
       conn.send({
         type: 'state',
         state: this.boardStates[this.state.boardStateIndex],
-      })
+      } as HostToClientData)
       if (this.state.selectorIndex) {
         conn.send({
-          type: 'pointer',
-          index: this.state.selectorIndex,
-        })
+          type: 'pointerMap',
+          indexMap: {
+            ...this.state.multiSelectorIndices,
+            [this.state.onlineId]: this.state.selectorIndex,
+          },
+        } as HostToClientData)
       }
       conn.send({
-        type: 'selected',
-        indices: this.state.selectedIndices,
-      })
+        type: 'selectedMap',
+        indicesMap: {
+          ...this.state.multiSelectedIndices,
+          [this.state.onlineId]: this.state.selectedIndices,
+        },
+      } as HostToClientData)
+      conn.send({
+        type: 'colorMap',
+        colorMap: {
+          ...this.state.multiColors,
+          [this.state.onlineId]: this.state.myColor,
+        },
+      } as HostToClientData)
       if (this.currentFile) {
         conn.send({
           type: 'image',
           file: this.currentFile,
           filetype: this.currentFileType,
-        })
+        } as HostToClientData)
       }
       conn.on('data', (data) => {
         this.hostProcessData(conn, data)
@@ -663,19 +722,28 @@ class Page extends React.Component<{}, PageState> {
     const { connections, selectedIndices, image } = this.state
     if (!event.altKey) {
       this.setState({ selectorIndex: index })
+      let payload: HostToClientData | ClientToHostData =
+        this.state.clientIds.length !== 0
+          ? { type: 'pointerMap', indexMap: { [this.state.onlineId]: index } }
+          : { type: 'pointer', index: index }
+
       for (let key in connections) {
-        connections[key].send({ type: 'pointer', index: index })
+        connections[key].send(payload)
       }
     }
     if (event.ctrlKey) {
       if (selectedIndices.includes(index)) {
         this.setState((state) => {
           const out = state.selectedIndices.filter((value) => value !== index)
+          let payload: HostToClientData | ClientToHostData =
+            this.state.clientIds.length !== 0
+              ? {
+                  type: 'selectedMap',
+                  indicesMap: { [this.state.onlineId]: out },
+                }
+              : { type: 'selected', indices: out }
           for (let key in connections) {
-            connections[key].send({
-              type: 'selected',
-              indices: out,
-            })
+            connections[key].send(payload)
           }
           return { selectedIndices: out }
         })
@@ -686,11 +754,15 @@ class Page extends React.Component<{}, PageState> {
       ) {
         this.setState((state) => {
           const out = state.selectedIndices.concat(index)
+          let payload: HostToClientData | ClientToHostData =
+            this.state.clientIds.length !== 0
+              ? {
+                  type: 'selectedMap',
+                  indicesMap: { [this.state.onlineId]: out },
+                }
+              : { type: 'selected', indices: out }
           for (let key in connections) {
-            connections[key].send({
-              type: 'selected',
-              indices: out,
-            })
+            connections[key].send(payload)
           }
           return { selectedIndices: out }
         })
@@ -736,6 +808,60 @@ class Page extends React.Component<{}, PageState> {
           indices: [index],
         })
       }
+    }
+  }
+
+  validate: (data: CellData[]) => boolean[] = (data) => {
+    let conflicts: boolean[] = Array(81).fill(false)
+    let arraySolution = []
+    const cellNumbers = data.map((cell) => cell.number)
+    for (let index = 0; index < 9; index++) {
+      arraySolution.push(cellNumbers.slice(index * 9, index * 9 + 9))
+    }
+
+    for (let y = 0; y < 9; y++) {
+      for (let x = 0; x < 9; x++) {
+        let value = arraySolution[y][x]
+        if (value) {
+          // Validate row
+          for (let x2 = x + 1; x2 < 9; x2++) {
+            if (arraySolution[y][x2] == value) {
+              conflicts[9 * y + x2] = true
+              conflicts[9 * y + x] = true
+            }
+          }
+
+          // Validate column
+          for (let y2 = y + 1; y2 < 9; y2++) {
+            if (arraySolution[y2][x] == value) {
+              conflicts[9 * y2 + x] = true
+              conflicts[9 * y + x] = true
+            }
+          }
+
+          // Validate square
+          let startY = Math.floor(y / 3) * 3
+          for (let y2 = startY; y2 < startY + 3; y2++) {
+            let startX = Math.floor(x / 3) * 3
+            for (let x2 = startX; x2 < startX + 3; x2++) {
+              if ((x2 != x || y2 != y) && arraySolution[y2][x2] == value) {
+                conflicts[9 * y2 + x2] = true
+              }
+            }
+          }
+        }
+      }
+    }
+    return conflicts
+  }
+
+  componentDidUpdate = (prevProps: any, prevState: PageState) => {
+    if (prevState.boardStateIndex !== this.state.boardStateIndex) {
+      const conflicts = this.validate(
+        this.boardStates[this.state.boardStateIndex],
+      )
+
+      this.setState((state) => ({ conflicts }))
     }
   }
 
@@ -930,20 +1056,25 @@ class Page extends React.Component<{}, PageState> {
     //When we join a remote server
     conn.on('open', () => {
       // conn.send({type: "pointerColor", color: this.state.myColor})
+      conn.send({
+        type: 'color',
+        color: this.state.myColor,
+      } as ClientToHostData)
+
       conn.on('data', (data: HostToClientData) => {
         if (data && typeof data !== 'string' && 'type' in data) {
-          if (data.type === 'pointer') {
+          if (data.type === 'pointerMap') {
             this.setState((state) => ({
               multiSelectorIndices: {
                 ...state.multiSelectorIndices,
-                [conn.peer]: data.index,
+                ...data.indexMap,
               },
             }))
-          } else if (data.type === 'selected') {
+          } else if (data.type === 'selectedMap') {
             this.setState((state) => ({
               multiSelectedIndices: {
                 ...state.multiSelectedIndices,
-                [conn.peer]: data.indices,
+                ...data.indicesMap,
               },
             }))
           } else if (data.type === 'state') {
@@ -955,6 +1086,13 @@ class Page extends React.Component<{}, PageState> {
             const blob = new Blob([data.file], { type: data.filetype })
             this.currentFile = blob
             this.imageLoad(blob)
+          } else if (data.type === 'colorMap') {
+            this.setState((state) => ({
+              multiColors: {
+                ...state.multiColors,
+                ...data.colorMap,
+              },
+            }))
           }
         }
       })
@@ -968,11 +1106,16 @@ class Page extends React.Component<{}, PageState> {
   }
 
   pageClicked = () => {
-    const { connections } = this.state
+    const { connections, onlineId } = this.state
     // console.log('deselect')
     this.setState({ selectorIndex: null })
+    const payload: HostToClientData | ClientToHostData =
+      this.state.clientIds.length !== 0
+        ? { type: 'pointerMap', indexMap: { [onlineId]: null } }
+        : { type: 'pointer', index: null }
+
     for (let key in connections) {
-      connections[key].send({ type: 'pointer', index: null })
+      connections[key].send(payload)
     }
   }
 
@@ -1066,6 +1209,17 @@ class Page extends React.Component<{}, PageState> {
             // setColor(color.hex)
             if (pickingMe) {
               this.setState({ myColor: color.hex })
+              const payload: HostToClientData | ClientToHostData =
+                this.state.clientIds.length !== 0
+                  ? {
+                      type: 'colorMap',
+                      colorMap: { [this.state.onlineId]: this.state.myColor },
+                    }
+                  : { type: 'color', color: this.state.myColor }
+              for (let conn in connections) {
+                connections[conn].send(payload)
+              }
+              localStorage.color = color.hex
             } else {
               this.setState({ selectorColor: color.hex })
               this.updateSelected((cell) => {
@@ -1139,13 +1293,16 @@ class Page extends React.Component<{}, PageState> {
       selectedIndices,
       selectorIndex,
       selectorColor,
+      multiColors,
       multiSelectedIndices,
       multiSelectorIndices,
       hostId,
       clientIds,
       connections,
+      conflicts,
       editorText,
     } = this.state
+
     return (
       <PageContainer>
         <GridContainer>
@@ -1169,37 +1326,50 @@ class Page extends React.Component<{}, PageState> {
             />
             {this.boardStates[boardStateIndex] && (
               <SudokuGrid style={{ padding: image.imageData ? '1px' : '2px' }}>
-                {(this.boardStates[boardStateIndex] as Array<CellData>).map(
-                  (cell, index) => (
-                    <GridCell
-                      select={this.select}
-                      boxGap={image.imageData ? '1px' : '2px'}
-                      cellGap={image.imageData ? '0px' : '1px'}
-                      key={index}
-                      selectedColor={
-                        // Check if in the list
-                        selectedIndices.includes(index)
-                          ? myColor
-                          : typeof Object.keys(multiSelectedIndices).find((i) =>
-                              multiSelectedIndices[i].includes(index),
-                            ) !== 'undefined'
-                          ? '#3388ff'
-                          : null
-                      }
-                      selectorColor={
-                        selectorIndex === index
-                          ? myColor
-                          : typeof Object.keys(multiSelectorIndices).find(
-                              (key) => multiSelectorIndices[key] === index,
-                            ) !== 'undefined'
-                          ? '#3388ff'
-                          : null
-                      }
-                      data={cell}
-                      index={index}
-                      imageLoaded={!!image.imageData}
-                    />
-                  ),
+                {(this.boardStates[boardStateIndex] as CellData[]).map(
+                  (cell, index) => {
+                    const selectorConnKey = Object.keys(
+                      multiSelectorIndices,
+                    ).find(
+                      (key) =>
+                        key !== onlineId && multiSelectorIndices[key] === index,
+                    )
+                    const selectedConnKey = Object.keys(
+                      multiSelectedIndices,
+                    ).find(
+                      (key) =>
+                        key !== onlineId &&
+                        multiSelectedIndices[key].includes(index),
+                    )
+
+                    return (
+                      <GridCell
+                        select={this.select}
+                        boxGap={image.imageData ? '1px' : '2px'}
+                        cellGap={image.imageData ? '0px' : '1px'}
+                        key={index}
+                        conflict={this.state.conflicts[index]}
+                        selectedColor={
+                          // Check if in the list
+                          selectedIndices.includes(index)
+                            ? myColor
+                            : selectedConnKey !== undefined
+                            ? multiColors[selectedConnKey]
+                            : null
+                        }
+                        selectorColor={
+                          selectorIndex === index
+                            ? myColor
+                            : selectorConnKey !== undefined
+                            ? multiColors[selectorConnKey]
+                            : null
+                        }
+                        data={cell}
+                        index={index}
+                        imageLoaded={!!image.imageData}
+                      />
+                    )
+                  },
                 )}
               </SudokuGrid>
             )}
