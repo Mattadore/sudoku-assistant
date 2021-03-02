@@ -43,6 +43,8 @@
   "scripts": {
     "build": "gatsby build",
     "develop": "gatsby develop -p 8080",
+    "start": "yarn develop",
+    "dev": "yarn develop",
     "format": "prettier --parser typescript --trailing-comma es5 --no-semi --single-quote --write \"src/**/*.ts*\"",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
