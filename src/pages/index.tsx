@@ -1,6 +1,6 @@
 import * as React from 'react'
 // import Link from 'gatsby-link'
-import { useState, useEffect, useRef, useCallback } from 'react'
+// import { useState, useEffect, useRef, useCallback } from 'react'
 import { graphql } from 'gatsby'
 import { CompactPicker } from 'react-color'
 import styled from '@emotion/styled'
@@ -10,6 +10,8 @@ import RichTextEditor, { EditorValue } from 'react-rte'
 import Peer from 'peerjs'
 // import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd'
 import chroma from 'chroma-js'
+import GridCell from '../components/GridCell'
+import { validate, getPixel } from '../helpers'
 
 // to generate all types from graphQL schema
 interface IndexPageProps {
@@ -64,13 +66,6 @@ const PageContainer = styled.div`
   flex-direction: row;
 `
 
-const SidebarContainer = styled.div`
-  flex: 1;
-  max-width: 25rem;
-  height: 100%;
-  background-color: #ffffff;
-`
-
 const SudokuGrid = styled.div`
   padding: 1px;
   display: grid;
@@ -95,233 +90,30 @@ const GridBackground = styled.div`
   display: flex;
 `
 
-const GridCellStyle = styled.div`
-  width: 5rem;
-  height: 5rem;
-`
-
-const GridCellBackground = styled.div`
-  position: relative;
-  width: 100%;
-  height: 100%;
-  z-index: 200;
-`
-
-const GridCellHighlightedAcross = styled.div`
-  z-index: 500;
-  top: calc(50% - 2px);
-  left: -15px;
-  width: 15px;
-  height: 4px;
-  position: absolute;
-  background-color: #ddaa00;
-`
-
-const GridSelectedCircle = styled.div`
-  position: absolute;
-  z-index: -500;
-  background-color: #ffcc00;
-  top: calc(50% - 0.75rem);
-  left: calc(50% - 0.75rem);
-  width: 1.5rem;
-  height: 1.5rem;
-  border-radius: 50%;
-`
-
-const HintNumberTop = styled.div`
-  position: absolute;
-  z-index: 2000;
-  top: 3px;
-  left: 3px;
-  font-size: 12px;
-  font-weight: bold;
-`
-
-const CentralNumberContainer = styled.div`
-  /* font-weight: bold; */
-  z-index: 5000;
-  font-size: 3rem;
-  width: 100%;
-  height: 100%;
-  align-items: center;
-  justify-content: center;
-  display: flex;
-`
-
-const NumbersContainer = styled.div`
-  position: relative;
-  top: -100%;
-  width: 100%;
-  height: 100%;
-  z-index: 5000;
-`
-
-const GridCellHighlightedUp = styled.div`
-  z-index: 500;
-  left: calc(50% - 2px);
-  top: -15px;
-  width: 4px;
-  height: 15px;
-  position: absolute;
-  background-color: #ddaa00;
-`
-
-interface CellData {
-  number: number | null
-  center: Array<number>
-  corner: Array<number>
-  color: string | null
-}
-
 type CellDiff = Partial<CellData>
 
-interface GridCellProps {
-  index: number
-  imageLoaded: boolean
-  data: CellData
-  selectorColor: string | null
-  selectedColor: string | null
-  select: (
-    index: number,
-    event: KeyboardEvent | React.MouseEvent<HTMLDivElement, MouseEvent>,
-    multi?: boolean,
-  ) => void
-  cellGap?: string
-  boxGap?: string
-  conflict: boolean
-}
-
-const GridCell: React.FC<GridCellProps> = React.memo(
-  ({
-    index,
-    imageLoaded,
-    data,
-    selectedColor,
-    selectorColor,
-    select,
-    cellGap = '0px',
-    boxGap = '1.5px',
-    conflict,
-  }) => {
-    console.log(conflict)
-    if (conflict !== undefined) {
-      console.log('woop')
-    }
-    const column = index % 9
-    const row = Math.floor(index / 9)
-    return (
-      <GridCellStyle
-        onMouseDown={(e) => {
-          // e.preventDefault()
-          // e.stopPropagation()
-          select(index, e)
-        }}
-        onMouseEnter={(e) => {
-          // console.log()
-          if (e.buttons === 1) {
-            e.preventDefault()
-            e.stopPropagation()
-            select(index, e, true)
-          }
-        }}
-        style={{
-          marginLeft: column % 3 === 0 ? boxGap : cellGap,
-          marginRight: column % 3 === 2 ? boxGap : cellGap,
-          marginTop: row % 3 === 0 ? boxGap : cellGap,
-          marginBottom: row % 3 === 2 ? boxGap : cellGap,
-        }}
-      >
-        <GridCellBackground
-          style={{
-            backgroundColor: data.color
-              ? data.color
-              : imageLoaded
-              ? '#00000000'
-              : '#ffffff',
-          }}
-        />
-        {/* <GridCellHighlightedStyle /> */}
-        <NumbersContainer>
-          <CentralNumberContainer
-            style={
-              !data.number
-                ? {
-                    fontSize: 12,
-                    fontWeight: 'bold',
-                  }
-                : conflict !== undefined && conflict
-                ? { color: '#AC3235', fontWeight: 'bold' }
-                : {}
-            }
-            className="noselect"
-          >
-            {data.number ? data.number : data.center.join('')}
-          </CentralNumberContainer>
-          {selectorColor && (
-            <>
-              <GridCellHighlightedUp
-                style={{ backgroundColor: selectorColor }}
-              />
-              <GridCellHighlightedAcross
-                style={{ backgroundColor: selectorColor }}
-              />
-              <GridCellHighlightedUp
-                style={{
-                  backgroundColor: selectorColor,
-                  top: '5rem',
-                }}
-              />
-              <GridCellHighlightedAcross
-                style={{
-                  backgroundColor: selectorColor,
-                  left: '5em',
-                }}
-              />
-            </>
-          )}
-          {selectedColor && (
-            <>
-              <GridSelectedCircle style={{ backgroundColor: selectedColor }} />
-            </>
-          )}
-
-          {!data.number && (
-            <HintNumberTop className="noselect">
-              {data.corner.join('')}
-            </HintNumberTop>
-          )}
-        </NumbersContainer>
-      </GridCellStyle>
-    )
-  },
-)
-
-function getPixel(imgData: ImageData, index: number) {
-  return imgData.data.slice(index * 4, index * 4 + 4)
-}
-
-const adjacentIndices = (
-  index: number,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-) => {
-  let indices = []
-  if (x > 0) {
-    indices.push(index - 1)
-  }
-  if (x < width - 1) {
-    indices.push(index + 1)
-  }
-  if (y > 0) {
-    indices.push(index - width)
-  }
-  if (y < height - 1) {
-    indices.push(index + width)
-  }
-  return indices
-}
+// const adjacentIndices = (
+//   index: number,
+//   x: number,
+//   y: number,
+//   width: number,
+//   height: number,
+// ) => {
+//   let indices = []
+//   if (x > 0) {
+//     indices.push(index - 1)
+//   }
+//   if (x < width - 1) {
+//     indices.push(index + 1)
+//   }
+//   if (y > 0) {
+//     indices.push(index - width)
+//   }
+//   if (y < height - 1) {
+//     indices.push(index + width)
+//   }
+//   return indices
+// }
 
 const preprocessImage = (imageData: ImageData) => {
   const canvas: HTMLCanvasElement = document.getElementById(
@@ -502,8 +294,7 @@ interface PageState {
   multiColors: { [key: string]: string }
   connections: { [key: string]: Peer.DataConnection }
   conflicts: boolean[]
-  pickingMe: boolean
-  myColor: string
+  // myColor: string
   selectorColor: string
   editorText: EditorValue
   boardStateIndex: number
@@ -517,7 +308,6 @@ interface PageState {
     bottomEdge: number
     imageData: ImageData | null
   }
-  // layers:
 }
 
 class Page extends React.Component<{}, PageState> {
@@ -529,9 +319,8 @@ class Page extends React.Component<{}, PageState> {
     multiColors: {},
     connections: {},
     conflicts: [],
-    pickingMe: false,
-    myColor:
-      typeof localStorage.color === 'string' ? localStorage.color : '#ffcc00',
+    // myColor:
+    //   typeof localStorage.color === 'string' ? localStorage.color : '#ffcc00',
     selectorColor: '#ffffff',
     boardStateIndex: 0,
     editorText: RichTextEditor.createEmptyValue(),
@@ -811,55 +600,9 @@ class Page extends React.Component<{}, PageState> {
     }
   }
 
-  validate: (data: CellData[]) => boolean[] = (data) => {
-    let conflicts: boolean[] = Array(81).fill(false)
-    let arraySolution = []
-    const cellNumbers = data.map((cell) => cell.number)
-    for (let index = 0; index < 9; index++) {
-      arraySolution.push(cellNumbers.slice(index * 9, index * 9 + 9))
-    }
-
-    for (let y = 0; y < 9; y++) {
-      for (let x = 0; x < 9; x++) {
-        let value = arraySolution[y][x]
-        if (value) {
-          // Validate row
-          for (let x2 = x + 1; x2 < 9; x2++) {
-            if (arraySolution[y][x2] == value) {
-              conflicts[9 * y + x2] = true
-              conflicts[9 * y + x] = true
-            }
-          }
-
-          // Validate column
-          for (let y2 = y + 1; y2 < 9; y2++) {
-            if (arraySolution[y2][x] == value) {
-              conflicts[9 * y2 + x] = true
-              conflicts[9 * y + x] = true
-            }
-          }
-
-          // Validate square
-          let startY = Math.floor(y / 3) * 3
-          for (let y2 = startY; y2 < startY + 3; y2++) {
-            let startX = Math.floor(x / 3) * 3
-            for (let x2 = startX; x2 < startX + 3; x2++) {
-              if ((x2 != x || y2 != y) && arraySolution[y2][x2] == value) {
-                conflicts[9 * y2 + x2] = true
-              }
-            }
-          }
-        }
-      }
-    }
-    return conflicts
-  }
-
   componentDidUpdate = (prevProps: any, prevState: PageState) => {
     if (prevState.boardStateIndex !== this.state.boardStateIndex) {
-      const conflicts = this.validate(
-        this.boardStates[this.state.boardStateIndex],
-      )
+      const conflicts = validate(this.boardStates[this.state.boardStateIndex])
 
       this.setState((state) => ({ conflicts }))
     }
@@ -1143,7 +886,6 @@ class Page extends React.Component<{}, PageState> {
 
   Sidebar = React.memo(
     ({
-      pickingMe,
       myColor,
       selectorColor,
       onlineId,
@@ -1152,7 +894,6 @@ class Page extends React.Component<{}, PageState> {
       connections,
       editorText,
     }: {
-      pickingMe: boolean
       myColor: string
       selectorColor: string
       onlineId: string
@@ -1208,7 +949,7 @@ class Page extends React.Component<{}, PageState> {
           onChangeComplete={(color) => {
             // setColor(color.hex)
             if (pickingMe) {
-              this.setState({ myColor: color.hex })
+              // this.setState({ myColor: color.hex })
               const payload: HostToClientData | ClientToHostData =
                 this.state.clientIds.length !== 0
                   ? {
