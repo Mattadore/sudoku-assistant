@@ -8,6 +8,7 @@ import produce from 'immer'
 import { Divider, Button, Accordion } from 'semantic-ui-react'
 import RichTextEditor, { EditorValue } from 'react-rte'
 import Peer from 'peerjs'
+import { List, Drawer, ListItem, TextareaAutosize } from '@material-ui/core'
 // import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd'
 import chroma from 'chroma-js'
 
@@ -1161,7 +1162,7 @@ class Page extends React.Component<{}, PageState> {
       connections: { [key: string]: Peer.DataConnection }
       editorText: EditorValue
     }) => (
-      <SidebarContainer>
+      <Drawer anchor="right" variant="permanent">
         <Divider horizontal>Color</Divider>
         <CompactPicker
           colors={[
@@ -1265,6 +1266,7 @@ class Page extends React.Component<{}, PageState> {
         {this.currentHost && 'Host is: ' + this.currentHost}
         {clientIds.length !== 0 && 'Clients are: ' + clientIds.join(', ')}
         <Divider horizontal>Notes</Divider>
+        {/* <TextareaAutosize /> */}
         <RichTextEditor value={editorText} onChange={this.setEditorText} />
         <Accordion>
           {/* <DragDropContext onDragEnd={() => {}}>
@@ -1278,7 +1280,7 @@ class Page extends React.Component<{}, PageState> {
     </Draggable>
   </DragDropContext> */}
         </Accordion>
-      </SidebarContainer>
+      </Drawer>
     ),
   )
 
