@@ -6,6 +6,19 @@
     "module": "commonjs",
     "target": "esnext",
     "jsx": "react",
+    // "paths": {
+    //   "src/*": [
+    //     "./src/*"
+    //   ],
+    //   "components/*": [
+    //     "./src/components/*"
+    //   ],
+    //   "pages/*": [
+    //     "./src/pages/*"
+    //   ],
+    // },
+    "baseUrl": "./src",
+    "strictNullChecks": true,
     "strict": false,
     "lib": ["dom", "es2015", "es2017"],
     "types": ["@emotion/core"],

@@ -2091,6 +2091,13 @@
   dependencies:
     "@types/react" "*"
 
+"@types/react-helmet@^6.1.0":
+  version "6.1.0"
+  resolved "https://registry.yarnpkg.com/@types/react-helmet/-/react-helmet-6.1.0.tgz#af586ed685f4905e2adc7462d1d65ace52beee7a"
+  integrity sha512-PYRoU1XJFOzQ3BHvWL1T8iDNbRjdMDJMT5hFmZKGbsq09kbSqJy61uwEpTrbTNWDopVphUT34zUSVLK9pjsgYQ==
+  dependencies:
+    "@types/react" "*"
+
 "@types/react-rte@^0.16.1":
   version "0.16.1"
   resolved "https://registry.yarnpkg.com/@types/react-rte/-/react-rte-0.16.1.tgz#f4a8355208b81ef89d9e010ce94ba2e9fdd3b72e"
@@ -6731,6 +6738,11 @@ gatsby-plugin-react-helmet@^3.3.10:
   integrity sha512-AcXYwmS3r298JWs6iQ3OLNxIe8L8i5a2iSdLr/SDMpHqumYm7q/vB9kCX0et5wM7DIuZ7aPXDrdi5yDCAvU5lg==
   dependencies:
     "@babel/runtime" "^7.10.3"
+
+gatsby-plugin-root-import@^2.0.6:
+  version "2.0.6"
+  resolved "https://registry.yarnpkg.com/gatsby-plugin-root-import/-/gatsby-plugin-root-import-2.0.6.tgz#72f812ce7a16d67773651c7db1d42f68970ae73c"
+  integrity sha512-eG0D+cVL5djVI5nxuQoZE4wBBL6rUq/KBPqPv+69vYolTXzlyj0+vIkqr2Y/xWt8hTK9BB8IOMltGxUmXIenig==
 
 gatsby-plugin-typescript@^2.4.18:
   version "2.4.18"
@@ -12037,7 +12049,7 @@ react@^16.13.1, react@^16.8.0:
     object-assign "^4.1.1"
     prop-types "^15.6.2"
 
-reactcss@^1.2.0:
+reactcss@^1.2.0, reactcss@^1.2.3:
   version "1.2.3"
   resolved "https://registry.yarnpkg.com/reactcss/-/reactcss-1.2.3.tgz#c00013875e557b1cf0dfd9a368a1c3dab3b548dd"
   integrity sha512-KiwVUcFu1RErkI97ywr8nvx8dNOpT03rbnma0SSalTYjkrPYaEajR4a/MRt6DZ46K6arDRbWMNHF+xH7G7n/8A==

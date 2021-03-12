@@ -5,12 +5,49 @@ import { graphql } from 'gatsby'
 import { CompactPicker } from 'react-color'
 import styled from '@emotion/styled'
 import produce from 'immer'
-import { Divider, Button, Accordion } from 'semantic-ui-react'
+import { Divider, Button } from 'semantic-ui-react'
 import RichTextEditor, { EditorValue } from 'react-rte'
 import Peer from 'peerjs'
-import { List, Drawer, ListItem, TextareaAutosize } from '@material-ui/core'
+import {
+  List,
+  Drawer,
+  ListItem,
+  TextareaAutosize,
+  Accordion,
+  Typography,
+  AccordionSummary,
+  AccordionDetails,
+  AppBar,
+  Toolbar,
+  IconButton,
+} from '@material-ui/core'
 // import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd'
 import chroma from 'chroma-js'
+import GridCell from 'components/GridCell'
+import Helmet from 'react-helmet'
+import { ExpandMore, Menu as MenuIcon } from '@material-ui/icons'
+
+import {
+  Theme,
+  makeStyles,
+  createStyles,
+  withStyles,
+} from '@material-ui/core/styles'
+import { TextField } from '@material-ui/core'
+
+const useStyles = makeStyles((theme: Theme) =>
+  createStyles({
+    root: {
+      flexGrow: 1,
+    },
+    menuButton: {
+      marginRight: theme.spacing(2),
+    },
+    title: {
+      flexGrow: 1,
+    },
+  }),
+)
 
 // to generate all types from graphQL schema
 interface IndexPageProps {
@@ -96,207 +133,6 @@ const GridBackground = styled.div`
   display: flex;
 `
 
-const GridCellStyle = styled.div`
-  width: 5rem;
-  height: 5rem;
-`
-
-const GridCellBackground = styled.div`
-  position: relative;
-  width: 100%;
-  height: 100%;
-  z-index: 200;
-`
-
-const GridCellHighlightedAcross = styled.div`
-  z-index: 500;
-  top: calc(50% - 2px);
-  left: -15px;
-  width: 15px;
-  height: 4px;
-  position: absolute;
-  background-color: #ddaa00;
-`
-
-const GridSelectedCircle = styled.div`
-  position: absolute;
-  z-index: -500;
-  background-color: #ffcc00;
-  top: calc(50% - 0.75rem);
-  left: calc(50% - 0.75rem);
-  width: 1.5rem;
-  height: 1.5rem;
-  border-radius: 50%;
-`
-
-const HintNumberTop = styled.div`
-  position: absolute;
-  z-index: 2000;
-  top: 3px;
-  left: 3px;
-  font-size: 12px;
-  font-weight: bold;
-`
-
-const CentralNumberContainer = styled.div`
-  /* font-weight: bold; */
-  z-index: 5000;
-  font-size: 3rem;
-  width: 100%;
-  height: 100%;
-  align-items: center;
-  justify-content: center;
-  display: flex;
-`
-
-const NumbersContainer = styled.div`
-  position: relative;
-  top: -100%;
-  width: 100%;
-  height: 100%;
-  z-index: 5000;
-`
-
-const GridCellHighlightedUp = styled.div`
-  z-index: 500;
-  left: calc(50% - 2px);
-  top: -15px;
-  width: 4px;
-  height: 15px;
-  position: absolute;
-  background-color: #ddaa00;
-`
-
-interface CellData {
-  number: number | null
-  center: Array<number>
-  corner: Array<number>
-  color: string | null
-}
-
-type CellDiff = Partial<CellData>
-
-interface GridCellProps {
-  index: number
-  imageLoaded: boolean
-  data: CellData
-  selectorColor: string | null
-  selectedColor: string | null
-  select: (
-    index: number,
-    event: KeyboardEvent | React.MouseEvent<HTMLDivElement, MouseEvent>,
-    multi?: boolean,
-  ) => void
-  cellGap?: string
-  boxGap?: string
-  conflict: boolean
-}
-
-const GridCell: React.FC<GridCellProps> = React.memo(
-  ({
-    index,
-    imageLoaded,
-    data,
-    selectedColor,
-    selectorColor,
-    select,
-    cellGap = '0px',
-    boxGap = '1.5px',
-    conflict,
-  }) => {
-    console.log(conflict)
-    if (conflict !== undefined) {
-      console.log('woop')
-    }
-    const column = index % 9
-    const row = Math.floor(index / 9)
-    return (
-      <GridCellStyle
-        onMouseDown={(e) => {
-          // e.preventDefault()
-          // e.stopPropagation()
-          select(index, e)
-        }}
-        onMouseEnter={(e) => {
-          // console.log()
-          if (e.buttons === 1) {
-            e.preventDefault()
-            e.stopPropagation()
-            select(index, e, true)
-          }
-        }}
-        style={{
-          marginLeft: column % 3 === 0 ? boxGap : cellGap,
-          marginRight: column % 3 === 2 ? boxGap : cellGap,
-          marginTop: row % 3 === 0 ? boxGap : cellGap,
-          marginBottom: row % 3 === 2 ? boxGap : cellGap,
-        }}
-      >
-        <GridCellBackground
-          style={{
-            backgroundColor: data.color
-              ? data.color
-              : imageLoaded
-              ? '#00000000'
-              : '#ffffff',
-          }}
-        />
-        {/* <GridCellHighlightedStyle /> */}
-        <NumbersContainer>
-          <CentralNumberContainer
-            style={
-              !data.number
-                ? {
-                    fontSize: 12,
-                    fontWeight: 'bold',
-                  }
-                : conflict !== undefined && conflict
-                ? { color: '#AC3235', fontWeight: 'bold' }
-                : {}
-            }
-            className="noselect"
-          >
-            {data.number ? data.number : data.center.join('')}
-          </CentralNumberContainer>
-          {selectorColor && (
-            <>
-              <GridCellHighlightedUp
-                style={{ backgroundColor: selectorColor }}
-              />
-              <GridCellHighlightedAcross
-                style={{ backgroundColor: selectorColor }}
-              />
-              <GridCellHighlightedUp
-                style={{
-                  backgroundColor: selectorColor,
-                  top: '5rem',
-                }}
-              />
-              <GridCellHighlightedAcross
-                style={{
-                  backgroundColor: selectorColor,
-                  left: '5em',
-                }}
-              />
-            </>
-          )}
-          {selectedColor && (
-            <>
-              <GridSelectedCircle style={{ backgroundColor: selectedColor }} />
-            </>
-          )}
-
-          {!data.number && (
-            <HintNumberTop className="noselect">
-              {data.corner.join('')}
-            </HintNumberTop>
-          )}
-        </NumbersContainer>
-      </GridCellStyle>
-    )
-  },
-)
-
 function getPixel(imgData: ImageData, index: number) {
   return imgData.data.slice(index * 4, index * 4 + 4)
 }
@@ -325,13 +161,6 @@ const adjacentIndices = (
 }
 
 const preprocessImage = (imageData: ImageData) => {
-  const canvas: HTMLCanvasElement = document.getElementById(
-    'sudoku-image',
-  ) as HTMLCanvasElement
-  const annotationCanvas: HTMLCanvasElement = document.getElementById(
-    'sudoku-annotations',
-  ) as HTMLCanvasElement
-
   const rows = Array(imageData.height).fill(0)
   const columns = Array(imageData.width).fill(0)
 
@@ -353,25 +182,27 @@ const preprocessImage = (imageData: ImageData) => {
   //   }
   // }
 
-  let annotationData: Uint8ClampedArray = new Uint8ClampedArray([...newData])
+  let annotationData: Uint8ClampedArray = new Uint8ClampedArray([
+    ...imageData.data,
+  ])
 
   for (let index = 0; index < imageData.data.length / 4; ++index) {
     const x = index % imageData.width
     const y = Math.floor(index / imageData.width)
     const pixelData = getPixel(imageData, index)
-    const [hue, chromaValue, lightness] = chroma([
-      ...pixelData.slice(0, 3),
-    ]).hcl()
-    // const intensity = (pixelData[0] + pixelData[1] + pixelData[2]) / 3
-    if (lightness < 20) {
-      //is black
-      columns[x] = ++columns[x]
-      rows[y] = ++rows[y]
-    }
-    if (lightness > 50 && (lightness > 95 || chromaValue > 10)) {
-      annotationData[index * 4 + 3] = 0
-    }
-  }
+  //   const [hue, chromaValue, lightness] = chroma([
+  //     ...pixelData.slice(0, 3),
+  //   ]).hcl()
+  //   // const intensity = (pixelData[0] + pixelData[1] + pixelData[2]) / 3
+  //   if (lightness < 20) {
+  //     //is black
+  //     columns[x] = ++columns[x]
+  //     rows[y] = ++rows[y]
+  //   }
+  //   if (lightness > 50 && (lightness > 95 || chromaValue > 10)) {
+  //     annotationData[index * 4 + 3] = 0
+  //   }
+  // }
 
   const rowMax = Math.max(...rows)
   const columnMax = Math.max(...columns)
@@ -407,24 +238,21 @@ const preprocessImage = (imageData: ImageData) => {
     imageData.width,
   )
 
+  // annotation is just the background image
   const newAnnotationData = new ImageData(
     new Uint8ClampedArray(annotationData),
     imageData.width,
   )
 
-  canvas.height = newImageData.height
-  canvas.width = newImageData.width
-  annotationCanvas.height = newAnnotationData.height
-  annotationCanvas.width = newAnnotationData.width
-  canvas.getContext('2d').putImageData(newImageData, 0, 0)
-  annotationCanvas.getContext('2d').putImageData(newAnnotationData, 0, 0)
-
-  return [leftEdge, rightEdge, topEdge, bottomEdge]
+  return {
+    leftEdge,
+    rightEdge,
+    topEdge,
+    bottomEdge,
+    newImageData,
+    newAnnotationData,
+  }
 }
-
-// const rectify(currentState: CellData[], incomingState: CellDiff[] ) {
-
-// }
 
 // get a differential tree btwn two states
 const getDiff = (
@@ -449,46 +277,23 @@ const getDiff = (
   return diff
 }
 
-type HostToClientData =
-  | {
-      type: 'state'
-      state: CellData[]
-    }
-  | {
-      type: 'pointerMap'
-      indexMap: { [connectionKey: string]: number }
-    }
-  | {
-      type: 'colorMap'
-      colorMap: { [connectionKey: string]: string }
-    }
-  | {
-      type: 'selectedMap'
-      indicesMap: { [connectionKey: string]: number[] }
-    }
-  | {
-      type: 'image'
-      file: Blob
-      filetype: string
-    }
+interface Userdata {
+  selectorIndex: number | null
+  selectedIndices: number[]
+  color: string
+}
 
-type ClientToHostData =
-  | {
-      type: 'pointer'
-      index: number
-    }
-  | {
-      type: 'selected'
-      indices: number[]
-    }
-  | {
-      type: 'update'
-      diff: { [key: string]: CellDiff }
-    }
-  | {
-      type: 'color'
-      color: string
-    }
+type HostToClientData = Partial<{
+  state: CellData[]
+  image: Blob
+  imagetype: string
+  userdataDiffMap: { [id: string]: Partial<Userdata> }
+}>
+
+type ClientToHostData = Partial<{
+  update: { [key: string]: CellDiff }
+  userdataDiff: Partial<Userdata>
+}>
 
 // type: string
 // index?: number
@@ -496,21 +301,22 @@ type ClientToHostData =
 // indices?: [number]
 
 interface PageState {
-  selectorIndex: number
-  multiSelectorIndices: { [key: string]: number }
+  multiUserdata: { [key: string]: Userdata }
+  selectorIndex: number | null
+  // multiSelectorIndices: { [key: string]: number | null }
   selectedIndices: number[]
-  multiSelectedIndices: { [key: string]: number[] }
-  multiColors: { [key: string]: string }
-  connections: { [key: string]: Peer.DataConnection }
+  // multiSelectedIndices: { [key: string]: number[] }
+  // multiColors: { [key: string]: string }
+  clients: { [key: string]: Peer.DataConnection }
+  host: Peer.DataConnection | null
   conflicts: boolean[]
   pickingMe: boolean
-  myColor: string
+  color: string
   selectorColor: string
   editorText: EditorValue
   boardStateIndex: number
   onlineId: string
-  hostId: string
-  clientIds: string[]
+  hostInputValue: string
   image: {
     leftEdge: number
     rightEdge: number
@@ -523,22 +329,23 @@ interface PageState {
 
 class Page extends React.Component<{}, PageState> {
   state: PageState = {
+    multiUserdata: {},
     selectorIndex: null,
-    multiSelectorIndices: {},
+    // multiSelectorIndices: {},
     selectedIndices: [],
-    multiSelectedIndices: {},
-    multiColors: {},
-    connections: {},
+    // multiSelectedIndices: {},
+    // multiColors: {},
+    clients: {},
+    host: null,
     conflicts: [],
     pickingMe: false,
-    myColor:
+    color:
       typeof localStorage.color === 'string' ? localStorage.color : '#ffcc00',
     selectorColor: '#ffffff',
     boardStateIndex: 0,
     editorText: RichTextEditor.createEmptyValue(),
     onlineId: 'offline',
-    hostId: '',
-    clientIds: [],
+    hostInputValue: '',
     image: {
       leftEdge: 0,
       rightEdge: 0,
@@ -548,8 +355,10 @@ class Page extends React.Component<{}, PageState> {
     },
   }
 
+  // mergeDataIntoState = () =>
+
   peer: Peer | null = null
-  currentHost: string | null = null
+  // currentHost: string | null = null
 
   // const [layers, setLayers] = useState([1, 2])
 
@@ -568,8 +377,55 @@ class Page extends React.Component<{}, PageState> {
   currentFileType: string | null = null
 
   // console.log('CLIENT IDS', clientIds.length)
+
+  // Invoked when changing anyone else's data
+  updateMultiuserdata = (update: { [id: string]: Partial<Userdata> }) => {
+    this.setState((state) => {
+      // TODO: blacklist the host from changing state keys they should not have access to
+      const mergedMultidata = { ...state.multiUserdata }
+      for (let id of Object.keys(update)) {
+        mergedMultidata[id] = {
+          ...(state.multiUserdata[id] ?? {}),
+          ...update[id],
+        }
+      }
+      return { multiUserdata: mergedMultidata }
+    })
+    const { clients } = this.state
+    if (Object.values(clients).length > 0) {
+      for (let client of Object.values(clients)) {
+        const { color, selectorIndex, selectedIndices } = this.state
+        client.send({
+          userdataDiffMap: {
+            ...this.state.multiUserdata,
+            [this.state.onlineId]: {
+              color,
+              selectorIndex,
+              selectedIndices,
+            } as Partial<Userdata>,
+          },
+        } as HostToClientData)
+      }
+    }
+  }
+
+  // Invoked when changing your OWN user data
+  updateUserdata = (update: Partial<Userdata>) => {
+    this.setState((state) => ({ ...state, ...update }))
+    const { host, clients } = this.state
+    if (host) {
+      host.send({ userdataDiff: update } as ClientToHostData)
+    } else if (Object.values(clients).length > 0) {
+      for (let client of Object.values(clients)) {
+        client.send({
+          userdataDiffMap: { [this.state.onlineId]: update },
+        } as HostToClientData)
+      }
+    }
+  }
+
   updateBoard = (update: (method: CellData[]) => void): void => {
-    const { boardStateIndex, clientIds, connections } = this.state
+    const { boardStateIndex, clients } = this.state
     //useCallback(
     const out = produce(
       this.boardStates[boardStateIndex],
@@ -580,138 +436,84 @@ class Page extends React.Component<{}, PageState> {
 
     this.boardStates.splice(boardStateIndex + 1, this.boardStates.length)
     this.boardStates.push(out)
-    if (clientIds.length !== 0) {
-      for (let clientId in clientIds) {
-        connections[clientIds[clientId]].send({
-          type: 'state',
+    if (Object.keys(clients).length !== 0) {
+      for (let client of Object.values(clients)) {
+        client.send({
           state: out,
-        })
+        } as HostToClientData)
       }
-    } else if (Object.keys(connections).length !== 0) {
+    } else if (this.state.host) {
       const diff = getDiff(this.boardStates[boardStateIndex], out)
-      console.log('DIFF: ', diff)
       if (diff !== {}) {
-        for (let key in connections) {
-          connections[key].send({ type: 'update', diff: diff })
-        }
+        this.state.host.send({ update: diff } as ClientToHostData)
       }
     }
 
     this.setState((state) => ({ boardStateIndex: state.boardStateIndex + 1 }))
   }
 
+  hostProcessRequest = (
+    request: ClientToHostData,
+    conn: Peer.DataConnection,
+  ) => {
+    if (request.userdataDiff) {
+      this.updateMultiuserdata({ [conn.peer]: request.userdataDiff })
+    }
+    if (request.update) {
+      this.updateBoard((cells: Array<CellData>) => {
+        for (let index in request.update) {
+          Object.assign(cells[parseInt(index)], request.update[index])
+        }
+      })
+    }
+  }
+
   // Process data from clients
   hostProcessData = (conn: Peer.DataConnection, data: ClientToHostData) => {
-    const { boardStateIndex, connections, onlineId } = this.state
-    if (data && typeof data !== 'string' && 'type' in data) {
-      if (data.type === 'pointer') {
-        this.setState((state) => ({
-          multiSelectorIndices: {
-            ...state.multiSelectorIndices,
-            [conn.peer]: data.index,
-          },
-        }))
-        for (let client in connections) {
-          connections[client].send({
-            type: 'pointerMap',
-            indexMap: { [conn.peer]: data.index },
-          } as HostToClientData)
-        }
-      } else if (data.type === 'selected') {
-        this.setState((state) => ({
-          multiSelectedIndices: {
-            ...state.multiSelectedIndices,
-            [conn.peer]: data.indices,
-          },
-        }))
-        for (let client in connections) {
-          connections[client].send({
-            type: 'selectedMap',
-            indicesMap: { [conn.peer]: data.indices },
-          } as HostToClientData)
-        }
-      } else if (data.type === 'update') {
-        this.updateBoard((cells: Array<CellData>) => {
-          for (let index in data.diff) {
-            Object.assign(cells[parseInt(index)], data.diff[index])
-          }
-        })
-      } else if (data.type === 'color') {
-        this.setState((state) => ({
-          multiColors: {
-            ...state.multiColors,
-            [conn.peer]: data.color,
-          },
-        }))
-        for (let client in connections) {
-          connections[client].send({
-            type: 'colorMap',
-            colorMap: { [conn.peer]: data.color },
-          } as HostToClientData)
-        }
-      }
-    }
+    const reply: HostToClientData = {}
+    const { boardStateIndex, clients, onlineId } = this.state
+    this.hostProcessRequest(data, conn)
   }
 
   // HOST connection setup
   connectionCallback = (conn: Peer.DataConnection) => {
-    this.setState((state) => ({
-      connections: {
-        ...state.connections,
-        [conn.peer]: conn,
-      },
-    }))
     conn.on('close', () => {
-      console.log('CLOSING')
       this.setState((state) => {
-        let { [conn.peer]: toDel, ...out } = state.connections
+        let { [conn.peer]: toDel, ...clientsOut } = state.clients
+        let { [conn.peer]: toDelUserdata, ...userdataOut } = state.multiUserdata
         return {
-          connections: out,
-          clientIds: state.clientIds.filter((id) => id !== conn.peer),
+          clients: clientsOut,
+          multiUserdata: userdataOut,
         }
       })
     })
     //When we have a client joining our hosted session
     conn.on('open', () => {
-      conn.send({
-        type: 'state',
+      const message: HostToClientData = {
         state: this.boardStates[this.state.boardStateIndex],
-      } as HostToClientData)
-      if (this.state.selectorIndex) {
-        conn.send({
-          type: 'pointerMap',
-          indexMap: {
-            ...this.state.multiSelectorIndices,
-            [this.state.onlineId]: this.state.selectorIndex,
+        userdataDiffMap: {
+          ...this.state.multiUserdata,
+          [this.state.onlineId]: {
+            color: this.state.color,
+            selectedIndices: this.state.selectedIndices,
+            selectorIndex: this.state.selectorIndex,
           },
-        } as HostToClientData)
-      }
-      conn.send({
-        type: 'selectedMap',
-        indicesMap: {
-          ...this.state.multiSelectedIndices,
-          [this.state.onlineId]: this.state.selectedIndices,
         },
-      } as HostToClientData)
-      conn.send({
-        type: 'colorMap',
-        colorMap: {
-          ...this.state.multiColors,
-          [this.state.onlineId]: this.state.myColor,
-        },
-      } as HostToClientData)
-      if (this.currentFile) {
-        conn.send({
-          type: 'image',
-          file: this.currentFile,
-          filetype: this.currentFileType,
-        } as HostToClientData)
       }
+      if (this.currentFile && this.currentFileType) {
+        message.image = this.currentFile
+        message.imagetype = this.currentFileType
+      }
+      conn.send(message)
       conn.on('data', (data) => {
         this.hostProcessData(conn, data)
       })
-      this.setState((state) => ({ clientIds: [...state.clientIds, conn.peer] }))
-      // conn.send({ type: 'pointer', index: index })
+      this.setState((state) => ({
+        clients: {
+          ...state.clients,
+          [conn.peer]: conn,
+        },
+      })) // conn.send({ type: 'pointer', index: index })
     })
   }
 
@@ -720,53 +522,25 @@ class Page extends React.Component<{}, PageState> {
     event: KeyboardEvent | React.MouseEvent<HTMLDivElement, MouseEvent>,
     multi = false,
   ) => {
-    const { connections, selectedIndices, image } = this.state
+    const { clients, selectedIndices, image, host } = this.state
     if (!event.altKey) {
-      this.setState({ selectorIndex: index })
-      let payload: HostToClientData | ClientToHostData =
-        this.state.clientIds.length !== 0
-          ? { type: 'pointerMap', indexMap: { [this.state.onlineId]: index } }
-          : { type: 'pointer', index: index }
-
-      for (let key in connections) {
-        connections[key].send(payload)
-      }
+      this.updateUserdata({ selectorIndex: index })
     }
     if (event.ctrlKey) {
       if (selectedIndices.includes(index)) {
-        this.setState((state) => {
-          const out = state.selectedIndices.filter((value) => value !== index)
-          let payload: HostToClientData | ClientToHostData =
-            this.state.clientIds.length !== 0
-              ? {
-                  type: 'selectedMap',
-                  indicesMap: { [this.state.onlineId]: out },
-                }
-              : { type: 'selected', indices: out }
-          for (let key in connections) {
-            connections[key].send(payload)
-          }
-          return { selectedIndices: out }
-        })
+        // this.setState((state) => {
+        const out = this.state.selectedIndices.filter(
+          (value) => value !== index,
+        )
+        this.updateUserdata({ selectedIndices: out })
+        return { selectedIndices: out }
       }
     } else if (event.shiftKey || multi) {
       if (
         typeof selectedIndices.find((value) => value === index) === 'undefined'
       ) {
-        this.setState((state) => {
-          const out = state.selectedIndices.concat(index)
-          let payload: HostToClientData | ClientToHostData =
-            this.state.clientIds.length !== 0
-              ? {
-                  type: 'selectedMap',
-                  indicesMap: { [this.state.onlineId]: out },
-                }
-              : { type: 'selected', indices: out }
-          for (let key in connections) {
-            connections[key].send(payload)
-          }
-          return { selectedIndices: out }
-        })
+        const out = this.state.selectedIndices.concat(index)
+        this.updateUserdata({ selectedIndices: out })
       }
     } else if (event.altKey) {
       // console.log
@@ -787,10 +561,10 @@ class Page extends React.Component<{}, PageState> {
             (rect.bottom - rect.top),
         )
 
-        if (canvas.getContext('2d').getImageData(x, y, 1, 1).data[3] === 255) {
+        if (canvas.getContext('2d')?.getImageData(x, y, 1, 1).data[3] === 255) {
           const color = chroma([
             ...canvas
-              .getContext('2d')
+              .getContext('2d')!
               .getImageData(x, y, 1, 1)
               .data.slice(0, 3),
           ])
@@ -802,13 +576,7 @@ class Page extends React.Component<{}, PageState> {
         }
       }
     } else {
-      this.setState({ selectedIndices: [index] })
-      for (let key in connections) {
-        connections[key].send({
-          type: 'selected',
-          indices: [index],
-        })
-      }
+      this.updateUserdata({ selectedIndices: [index] })
     }
   }
 
@@ -876,7 +644,7 @@ class Page extends React.Component<{}, PageState> {
   }
 
   keyCallback = (event: KeyboardEvent) => {
-    const { selectorIndex, boardStateIndex, connections } = this.state
+    const { selectorIndex, boardStateIndex, clients, host } = this.state
     if (selectorIndex === null) {
       return
     }
@@ -927,31 +695,30 @@ class Page extends React.Component<{}, PageState> {
     switch (event.key) {
       case 'y':
         if (
-          !this.currentHost &&
+          !host &&
           event.ctrlKey &&
           boardStateIndex < this.boardStates.length - 1
         ) {
           this.setState({
             boardStateIndex: boardStateIndex + 1,
           })
-          for (let clientId in this.state.clientIds) {
-            connections[this.state.clientIds[clientId]].send({
+          for (let client of Object.values(clients)) {
+            client.send({
               type: 'state',
               state: this.boardStates[boardStateIndex + 1],
-            })
+            } as HostToClientData)
           }
         }
         break
       case 'z':
-        if (!this.currentHost && event.ctrlKey && boardStateIndex > 0) {
+        if (!host && event.ctrlKey && boardStateIndex > 0) {
           this.setState((state) => ({
             boardStateIndex: state.boardStateIndex - 1,
           }))
-          for (let clientId in this.state.clientIds) {
-            connections[this.state.clientIds[clientId]].send({
-              type: 'state',
+          for (let client of Object.values(clients)) {
+            client.send({
               state: this.boardStates[boardStateIndex - 1],
-            })
+            } as HostToClientData)
           }
         }
         break
@@ -962,15 +729,18 @@ class Page extends React.Component<{}, PageState> {
           const allIndices = Array(81)
             .fill(0)
             .map((v, index) => index)
-          this.setState({
-            selectedIndices: allIndices,
-          })
-          for (let key in connections) {
-            connections[key].send({
-              type: 'selected',
-              indices: allIndices,
-            })
-          }
+          // this.setState({
+          //   selectedIndices: allIndices,
+          // })
+          // for (let key in connections) {
+          //   connections[key].send([
+          //     {
+          //       type: 'selected',
+          //       indices: allIndices,
+          //     },
+          //   ])
+          // }
+          this.updateUserdata({ selectedIndices: allIndices })
         }
         break
       case 'ArrowLeft':
@@ -1009,14 +779,14 @@ class Page extends React.Component<{}, PageState> {
   }
 
   fileInput = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const { connections } = this.state
-    if (event.target.files.length) {
+    const { host, clients } = this.state
+    if (event.target.files?.length) {
       const file = event.target.files[0]
       const blob = new Blob([file], { type: file.type })
       this.currentFile = blob
       this.currentFileType = file.type
-      for (let key in connections) {
-        connections[key].send({
+      for (let conn of host ? [host] : Object.values(clients)) {
+        conn.send({
           type: 'image',
           file: blob,
           // name: file.name,
@@ -1029,6 +799,9 @@ class Page extends React.Component<{}, PageState> {
 
   imageLoad = (file: Blob) => {
     const canvas = document.getElementById('sudoku-image') as HTMLCanvasElement
+    const annotationCanvas = document.getElementById(
+      'sudoku-annotations',
+    ) as HTMLCanvasElement
 
     const image = new Image()
     const url = URL.createObjectURL(file)
@@ -1037,13 +810,36 @@ class Page extends React.Component<{}, PageState> {
     image.onload = () => {
       URL.revokeObjectURL(url)
       const context = canvas.getContext('2d')
+      const annotationContext = canvas.getContext('2d')
+      if (!(context && annotationContext)) {
+        console.error('Canvas failed to load?')
+        return
+      }
       canvas.width = image.width
       canvas.height = image.height
       context.drawImage(image, 0, 0)
       const imageData = context.getImageData(0, 0, canvas.width, canvas.height)
-      const [leftEdge, rightEdge, topEdge, bottomEdge] = preprocessImage(
-        imageData,
-      )
+      const preprocessed = preprocessImage(imageData)
+      if (!preprocessed) {
+        console.error("Image loading failed")
+        return 
+      }
+
+      const {
+        leftEdge,
+        rightEdge,
+        topEdge,
+        bottomEdge,
+        newImageData,
+        newAnnotationData,
+      } = preprocessed
+
+      canvas.height = newImageData.height
+      canvas.width = newImageData.width
+      annotationCanvas.height = newAnnotationData.height
+      annotationCanvas.width = newAnnotationData.width
+      context.putImageData(newImageData, 0, 0)
+      annotationContext.putImageData(newAnnotationData, 0, 0)
       this.setState({
         image: { leftEdge, rightEdge, topEdge, bottomEdge, imageData },
       })
@@ -1052,72 +848,52 @@ class Page extends React.Component<{}, PageState> {
 
   // CLIENT connection setup
   initiateClient = () => {
-    this.currentHost = this.state.hostId
-    const conn = this.peer.connect(this.currentHost)
+    const currentHost = this.state.hostInputValue
+    // this.setState({ host: currentHost })
+    if (!this.peer) {
+      console.error('Cannot initiate client connection, peerjs setting up')
+      return
+    }
+    const conn = this.peer.connect(currentHost)
     //When we join a remote server
     conn.on('open', () => {
       // conn.send({type: "pointerColor", color: this.state.myColor})
       conn.send({
-        type: 'color',
-        color: this.state.myColor,
+        userdataDiff: {
+          color: this.state.color,
+          selectedIndices: this.state.selectedIndices,
+          selectorIndex: this.state.selectorIndex,
+        },
       } as ClientToHostData)
 
       conn.on('data', (data: HostToClientData) => {
-        if (data && typeof data !== 'string' && 'type' in data) {
-          if (data.type === 'pointerMap') {
-            this.setState((state) => ({
-              multiSelectorIndices: {
-                ...state.multiSelectorIndices,
-                ...data.indexMap,
-              },
-            }))
-          } else if (data.type === 'selectedMap') {
-            this.setState((state) => ({
-              multiSelectedIndices: {
-                ...state.multiSelectedIndices,
-                ...data.indicesMap,
-              },
-            }))
-          } else if (data.type === 'state') {
+        if (data && typeof data !== 'string') {
+          // TODO: screw client out of their own state list?
+          if (data.state) {
             this.boardStates.push(data.state)
             this.setState((state) => ({
               boardStateIndex: state.boardStateIndex + 1,
             }))
-          } else if (data.type === 'image') {
-            const blob = new Blob([data.file], { type: data.filetype })
+          }
+          if (data.image && data.imagetype) {
+            const blob = new Blob([data.image], { type: data.imagetype })
             this.currentFile = blob
             this.imageLoad(blob)
-          } else if (data.type === 'colorMap') {
-            this.setState((state) => ({
-              multiColors: {
-                ...state.multiColors,
-                ...data.colorMap,
-              },
-            }))
+          }
+          if (data.userdataDiffMap) {
+            this.updateMultiuserdata(data.userdataDiffMap)
           }
         }
       })
     })
-    this.setState((state) => ({
-      connections: {
-        ...state.connections,
-        [this.currentHost]: conn,
-      },
-    }))
+    this.setState({
+      host: conn,
+    })
   }
 
   pageClicked = () => {
-    const { connections, onlineId } = this.state
     // console.log('deselect')
-    this.setState({ selectorIndex: null })
-    const payload: HostToClientData | ClientToHostData =
-      this.state.clientIds.length !== 0
-        ? { type: 'pointerMap', indexMap: { [onlineId]: null } }
-        : { type: 'pointer', index: null }
-
-    for (let key in connections) {
-      connections[key].send(payload)
-    }
+    this.updateUserdata({ selectorIndex: null })
   }
 
   componentDidMount = () => {
@@ -1133,7 +909,7 @@ class Page extends React.Component<{}, PageState> {
   }
 
   componentWillUnmount = () => {
-    this.peer.off('connection', this.connectionCallback)
+    this.peer?.off('connection', this.connectionCallback)
     window.removeEventListener('keydown', this.keyCallback)
     window.removeEventListener('mousedown', this.pageClicked)
   }
@@ -1148,87 +924,116 @@ class Page extends React.Component<{}, PageState> {
       myColor,
       selectorColor,
       onlineId,
-      hostId,
-      clientIds,
-      connections,
-      editorText,
-    }: {
+      hostInputValue,
+      // clientIds,
+      // connections,
+      host,
+      clients,
+    }: // editorText,
+    {
       pickingMe: boolean
       myColor: string
       selectorColor: string
       onlineId: string
-      hostId: string
-      clientIds: string[]
-      connections: { [key: string]: Peer.DataConnection }
-      editorText: EditorValue
+      hostInputValue: string
+      host: Peer.DataConnection | null
+      clients: { [key: string]: Peer.DataConnection }
+      // clientIds: string[]
+      // connections: { [key: string]: Peer.DataConnection }
+      // editorText: EditorValue
     }) => (
       <Drawer anchor="right" variant="permanent">
-        <Divider horizontal>Color</Divider>
-        <CompactPicker
-          colors={[
-            '#FFFFFF',
-            '#f3c693',
-            '#ff7575',
-            '#FE9200',
-            '#FCDC00',
-            '#f3fb7f',
-            '#DBDF00',
-            '#8cd2b1',
-            '#80EFFF',
-            '#2EEFFF',
-            '#AEA1FF',
-            '#FDA1FF',
-            //
-            '#B3B3B3',
-            '#ffbeb1',
-            '#FF492A',
-            '#E27300',
-            '#FCC400',
-            '#B0BC00',
-            '#A4DD00',
-            '#00FB83',
-            '#68CCCA',
-            '#6AC7FF',
-            '#D579FF',
-            '#FA28FF',
-            //
-            '#000000',
-            '#ef9173',
-            '#ff0000',
-            '#ff4d00',
-            '#FB9E00',
-            '#68BC00',
-            '#00fb1d',
-            '#30C18A',
-            '#16A5A5',
-            '#009CE0',
-            '#7B64FF',
-            '#AB149E',
-          ]}
-          color={pickingMe ? myColor : selectorColor}
-          onChangeComplete={(color) => {
-            // setColor(color.hex)
-            if (pickingMe) {
-              this.setState({ myColor: color.hex })
-              const payload: HostToClientData | ClientToHostData =
-                this.state.clientIds.length !== 0
-                  ? {
-                      type: 'colorMap',
-                      colorMap: { [this.state.onlineId]: this.state.myColor },
-                    }
-                  : { type: 'color', color: this.state.myColor }
-              for (let conn in connections) {
-                connections[conn].send(payload)
-              }
-              localStorage.color = color.hex
-            } else {
-              this.setState({ selectorColor: color.hex })
-              this.updateSelected((cell) => {
-                cell.color = color.hex
-              })
-            }
-          }}
-        />
+        {/* <Divider horizontal>Color</Divider> */}
+        {/* <List disablePadding> */}
+        <Accordion>
+          <AccordionSummary expandIcon={<ExpandMore />}>
+            <Typography>Multiplayer</Typography>
+          </AccordionSummary>
+          <AccordionDetails>
+            <TextField id="filled-basic" label="Filled" variant="filled" />
+          </AccordionDetails>
+        </Accordion>
+        <Accordion>
+          <AccordionSummary expandIcon={<ExpandMore />}>
+            <Typography>Settings</Typography>
+          </AccordionSummary>
+          <AccordionDetails>
+            <CompactPicker
+              colors={[
+                '#FFFFFF',
+                '#f3c693',
+                '#ff7575',
+                '#FE9200',
+                '#FCDC00',
+                '#f3fb7f',
+                '#DBDF00',
+                '#8cd2b1',
+                '#80EFFF',
+                '#2EEFFF',
+                '#AEA1FF',
+                '#FDA1FF',
+                //
+                '#B3B3B3',
+                '#ffbeb1',
+                '#FF492A',
+                '#E27300',
+                '#FCC400',
+                '#B0BC00',
+                '#A4DD00',
+                '#00FB83',
+                '#68CCCA',
+                '#6AC7FF',
+                '#D579FF',
+                '#FA28FF',
+                //
+                '#000000',
+                '#ef9173',
+                '#ff0000',
+                '#ff4d00',
+                '#FB9E00',
+                '#68BC00',
+                '#00fb1d',
+                '#30C18A',
+                '#16A5A5',
+                '#009CE0',
+                '#7B64FF',
+                '#AB149E',
+              ]}
+              styles={{
+                default: {
+                  // clear: { color: '#ffffff' },
+                  compact: {
+                    // justifySelf: 'stretch',
+                    backgroundColor: '#e8e8e8',
+                    // marginLeft: 'auto',
+                    // left: 'auto',
+                    // transform: 'translateX(-50%)',
+                    // marginRight: 'auto',
+                  },
+                  // Compact: { color: '#ffffff' },
+                },
+              }}
+              color={pickingMe ? myColor : selectorColor}
+              onChangeComplete={(color) => {
+                if (pickingMe) {
+                  this.updateUserdata({ color: color.hex })
+                  localStorage.color = color.hex
+                } else {
+                  this.setState({ selectorColor: color.hex })
+                  this.updateSelected((cell) => {
+                    cell.color = color.hex
+                  })
+                }
+              }}
+            />
+          </AccordionDetails>
+        </Accordion>
+        <ListItem>testing dis shiz</ListItem>
+        <ListItem>testing big time</ListItem>
+        <ListItem>testing lets go</ListItem>
+        <ListItem>testing dis shiz</ListItem>
+        <ListItem>testing dis shiz</ListItem>
+        {/* </List> */}
         <Button
           onClick={(event) => {
             this.setState((state) => ({ pickingMe: !state.pickingMe }))
@@ -1250,36 +1055,24 @@ class Page extends React.Component<{}, PageState> {
               }
             }}
             onChange={(event) => {
-              this.setState({ hostId: event.target.value })
+              this.setState({ hostInputValue: event.target.value })
             }}
-            value={hostId}
+            value={hostInputValue}
           />
           <span style={{ float: 'right' }}>
-            {Object.keys(connections).length !== 0
-              ? clientIds.length !== 0
-                ? 'HOST'
-                : 'CLIENT'
+            {host
+              ? 'CLIENT'
+              : Object.keys(clients).length !== 0
+              ? 'HOST'
               : 'NOT CONNECTED'}
           </span>
         </span>
         <br />
-        {this.currentHost && 'Host is: ' + this.currentHost}
-        {clientIds.length !== 0 && 'Clients are: ' + clientIds.join(', ')}
+        {this.state.host && 'Host is: ' + this.state.host.peer}
+        {Object.keys(clients).length !== 0 &&
+          'Clients are: ' + Object.keys(clients).join(', ')}
         <Divider horizontal>Notes</Divider>
-        {/* <TextareaAutosize /> */}
-        <RichTextEditor value={editorText} onChange={this.setEditorText} />
-        <Accordion>
-          {/* <DragDropContext onDragEnd={() => {}}>
-    <Draggable>
-      <Droppable>
-        <>hi</>
-      </Droppable>
-      <Droppable>
-        <>hello</>
-      </Droppable>
-    </Draggable>
-  </DragDropContext> */}
-        </Accordion>
+        <TextareaAutosize />
       </Drawer>
     ),
   )
@@ -1289,24 +1082,35 @@ class Page extends React.Component<{}, PageState> {
     const {
       image,
       boardStateIndex,
-      myColor,
+      color: myColor,
       pickingMe,
       onlineId,
       selectedIndices,
       selectorIndex,
+      multiUserdata,
       selectorColor,
-      multiColors,
-      multiSelectedIndices,
-      multiSelectorIndices,
-      hostId,
-      clientIds,
-      connections,
+      clients,
+      host,
+      hostInputValue,
       conflicts,
       editorText,
     } = this.state
 
     return (
       <PageContainer>
+        <Helmet>
+          <link
+            rel="stylesheet"
+            href="https://fonts.googleapis.com/icon?family=Material+Icons"
+          />
+          <link
+            rel="stylesheet"
+            href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap"
+          />
+
+          <title>Sudoku Assistant</title>
+          <meta name="description" content="Sudoku solvey helpey" />
+        </Helmet>
         <GridContainer>
           <GridBackground
             style={image.imageData ? { backgroundColor: '#ffffff' } : {}}
@@ -1317,12 +1121,12 @@ class Page extends React.Component<{}, PageState> {
           >
             {/* <SudokuImafno */}
             <SudokuImageCanvas
-              style={{ zIndex: 300 }}
+              style={{ zIndex: 200 }}
               image={image}
               id="sudoku-annotations"
             />
             <SudokuImageCanvas
-              style={{ zIndex: 200 }}
+              style={{ zIndex: 300 }}
               image={image}
               id="sudoku-image"
             />
@@ -1330,18 +1134,15 @@ class Page extends React.Component<{}, PageState> {
               <SudokuGrid style={{ padding: image.imageData ? '1px' : '2px' }}>
                 {(this.boardStates[boardStateIndex] as CellData[]).map(
                   (cell, index) => {
-                    const selectorConnKey = Object.keys(
-                      multiSelectorIndices,
-                    ).find(
-                      (key) =>
-                        key !== onlineId && multiSelectorIndices[key] === index,
-                    )
-                    const selectedConnKey = Object.keys(
-                      multiSelectedIndices,
-                    ).find(
+                    const selectorConnKey = Object.keys(multiUserdata).find(
                       (key) =>
                         key !== onlineId &&
-                        multiSelectedIndices[key].includes(index),
+                        multiUserdata[key].selectorIndex === index,
+                    )
+                    const selectedConnKey = Object.keys(multiUserdata).find(
+                      (key) =>
+                        key !== onlineId &&
+                        multiUserdata[key]?.selectedIndices?.includes(index),
                     )
 
                     return (
@@ -1356,14 +1157,14 @@ class Page extends React.Component<{}, PageState> {
                           selectedIndices.includes(index)
                             ? myColor
                             : selectedConnKey !== undefined
-                            ? multiColors[selectedConnKey]
+                            ? multiUserdata[selectedConnKey].color
                             : null
                         }
                         selectorColor={
                           selectorIndex === index
                             ? myColor
                             : selectorConnKey !== undefined
-                            ? multiColors[selectorConnKey]
+                            ? multiUserdata[selectorConnKey].color
                             : null
                         }
                         data={cell}
@@ -1382,10 +1183,10 @@ class Page extends React.Component<{}, PageState> {
           myColor={myColor}
           selectorColor={selectorColor}
           onlineId={onlineId}
-          hostId={hostId}
-          clientIds={clientIds}
-          connections={connections}
-          editorText={editorText}
+          hostInputValue={hostInputValue}
+          // editorText={editorText}
+          host={host}
+          clients={clients}
         />
       </PageContainer>
     )
