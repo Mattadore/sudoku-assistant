@@ -165,6 +165,9 @@ const preprocessImage = (imageData: ImageData) => {
   const columns = Array(imageData.width).fill(0)
 
   let newData: Uint8ClampedArray = new Uint8ClampedArray([...imageData.data])
+  let annotationData: Uint8ClampedArray = new Uint8ClampedArray([
+    ...imageData.data,
+  ])
 
   // Blacken semi-dark pixels adjacent to black ones
   // for (let index = 0; index < imageData.data.length / 4; ++index) {
@@ -182,27 +185,23 @@ const preprocessImage = (imageData: ImageData) => {
   //   }
   // }
 
-  let annotationData: Uint8ClampedArray = new Uint8ClampedArray([
-    ...imageData.data,
-  ])
-
   for (let index = 0; index < imageData.data.length / 4; ++index) {
     const x = index % imageData.width
     const y = Math.floor(index / imageData.width)
     const pixelData = getPixel(imageData, index)
-  //   const [hue, chromaValue, lightness] = chroma([
-  //     ...pixelData.slice(0, 3),
-  //   ]).hcl()
-  //   // const intensity = (pixelData[0] + pixelData[1] + pixelData[2]) / 3
-  //   if (lightness < 20) {
-  //     //is black
-  //     columns[x] = ++columns[x]
-  //     rows[y] = ++rows[y]
-  //   }
-  //   if (lightness > 50 && (lightness > 95 || chromaValue > 10)) {
-  //     annotationData[index * 4 + 3] = 0
-  //   }
-  // }
+    const [hue, chromaValue, lightness] = chroma([
+      ...pixelData.slice(0, 3),
+    ]).hcl()
+    // const intensity = (pixelData[0] + pixelData[1] + pixelData[2]) / 3
+    if (lightness < 20) {
+      //is black
+      columns[x] = ++columns[x]
+      rows[y] = ++rows[y]
+    }
+    if (lightness > 50 && (lightness > 95 || chromaValue > 10)) {
+      annotationData[index * 4 + 3] = 0
+    }
+  }
 
   const rowMax = Math.max(...rows)
   const columnMax = Math.max(...columns)
@@ -810,7 +809,7 @@ class Page extends React.Component<{}, PageState> {
     image.onload = () => {
       URL.revokeObjectURL(url)
       const context = canvas.getContext('2d')
-      const annotationContext = canvas.getContext('2d')
+      const annotationContext = annotationCanvas.getContext('2d')
       if (!(context && annotationContext)) {
         console.error('Canvas failed to load?')
         return
@@ -821,8 +820,8 @@ class Page extends React.Component<{}, PageState> {
       const imageData = context.getImageData(0, 0, canvas.width, canvas.height)
       const preprocessed = preprocessImage(imageData)
       if (!preprocessed) {
-        console.error("Image loading failed")
-        return 
+        console.error('Image loading failed')
+        return
       }
 
       const {
@@ -1121,12 +1120,12 @@ class Page extends React.Component<{}, PageState> {
           >
             {/* <SudokuImafno */}
             <SudokuImageCanvas
-              style={{ zIndex: 200 }}
+              style={{ zIndex: 300 }}
               image={image}
               id="sudoku-annotations"
             />
             <SudokuImageCanvas
-              style={{ zIndex: 300 }}
+              style={{ zIndex: 100 }}
               image={image}
               id="sudoku-image"
             />
