@@ -8,6 +8,7 @@ import produce from 'immer'
 import { Divider, Button } from 'semantic-ui-react'
 import RichTextEditor, { EditorValue } from 'react-rte'
 import Peer from 'peerjs'
+import { decompressFromBase64 } from 'lz-string'
 import {
   List,
   Drawer,
@@ -49,7 +50,6 @@ const useStyles = makeStyles((theme: Theme) =>
   }),
 )
 
-// to generate all types from graphQL schema
 interface IndexPageProps {
   data: {
     site: {
@@ -128,6 +128,8 @@ const GridBackground = styled.div`
   position: relative;
   margin: 0;
   padding: 0px;
+  user-drag: none;
+  user-select: none;
   background-color: #000000;
   z-index: 0;
   display: flex;
@@ -298,6 +300,10 @@ type ClientToHostData = Partial<{
 // index?: number
 // state?: CellData[]
 // indices?: [number]
+
+interface FPuzzleData {
+  grid: { c?: string }[][]
+}
 
 interface PageState {
   multiUserdata: { [key: string]: Userdata }
@@ -513,6 +519,20 @@ class Page extends React.Component<{}, PageState> {
           [conn.peer]: conn,
         },
       })) // conn.send({ type: 'pointer', index: index })
+    })
+  }
+
+  processImport = (importData: FPuzzleData) => {
+    this.updateBoard((data) => {
+      if ('grid' in importData) {
+        for (let row = 0; row < 9; ++row) {
+          for (let column = 0; column < 9; ++column) {
+            if ('c' in importData.grid[row][column]) {
+              data[column * 9 + row].color = importData.grid[row][column].c!
+            }
+          }
+        }
+      }
     })
   }
 
@@ -940,140 +960,162 @@ class Page extends React.Component<{}, PageState> {
       // clientIds: string[]
       // connections: { [key: string]: Peer.DataConnection }
       // editorText: EditorValue
-    }) => (
-      <Drawer anchor="right" variant="permanent">
-        {/* <Divider horizontal>Color</Divider> */}
-        {/* <List disablePadding> */}
-        <Accordion>
-          <AccordionSummary expandIcon={<ExpandMore />}>
-            <Typography>Multiplayer</Typography>
-          </AccordionSummary>
-          <AccordionDetails>
-            <TextField id="filled-basic" label="Filled" variant="filled" />
-          </AccordionDetails>
-        </Accordion>
-        <Accordion>
-          <AccordionSummary expandIcon={<ExpandMore />}>
-            <Typography>Settings</Typography>
-          </AccordionSummary>
-          <AccordionDetails>
-            <CompactPicker
-              colors={[
-                '#FFFFFF',
-                '#f3c693',
-                '#ff7575',
-                '#FE9200',
-                '#FCDC00',
-                '#f3fb7f',
-                '#DBDF00',
-                '#8cd2b1',
-                '#80EFFF',
-                '#2EEFFF',
-                '#AEA1FF',
-                '#FDA1FF',
-                //
-                '#B3B3B3',
-                '#ffbeb1',
-                '#FF492A',
-                '#E27300',
-                '#FCC400',
-                '#B0BC00',
-                '#A4DD00',
-                '#00FB83',
-                '#68CCCA',
-                '#6AC7FF',
-                '#D579FF',
-                '#FA28FF',
-                //
-                '#000000',
-                '#ef9173',
-                '#ff0000',
-                '#ff4d00',
-                '#FB9E00',
-                '#68BC00',
-                '#00fb1d',
-                '#30C18A',
-                '#16A5A5',
-                '#009CE0',
-                '#7B64FF',
-                '#AB149E',
-              ]}
-              styles={{
-                default: {
-                  // clear: { color: '#ffffff' },
-                  compact: {
-                    // justifySelf: 'stretch',
-                    backgroundColor: '#e8e8e8',
-                    // marginLeft: 'auto',
-                    // left: 'auto',
-                    // transform: 'translateX(-50%)',
-                    // marginRight: 'auto',
-                  },
-                  // Compact: { color: '#ffffff' },
-                },
-              }}
-              color={pickingMe ? myColor : selectorColor}
-              onChangeComplete={(color) => {
-                if (pickingMe) {
-                  this.updateUserdata({ color: color.hex })
-                  localStorage.color = color.hex
-                } else {
-                  this.setState({ selectorColor: color.hex })
-                  this.updateSelected((cell) => {
-                    cell.color = color.hex
-                  })
-                }
-              }}
-            />
-          </AccordionDetails>
-        </Accordion>
-        <ListItem>testing dis shiz</ListItem>
-        <ListItem>testing big time</ListItem>
-        <ListItem>testing lets go</ListItem>
-        <ListItem>testing dis shiz</ListItem>
-        <ListItem>testing dis shiz</ListItem>
-        {/* </List> */}
-        <Button
-          onClick={(event) => {
-            this.setState((state) => ({ pickingMe: !state.pickingMe }))
-          }}
-          style={{ backgroundColor: myColor }}
-        >
-          {pickingMe ? 'Picking my color...' : 'Pick my color'}{' '}
-        </Button>
-        <Divider horizontal>File</Divider>
-        <input type="file" id="upload-button" onChange={this.fileInput} />
-        <Divider horizontal>Multiplayer</Divider>
-        ID: {onlineId} <br />
-        <span>
-          <input
-            // type="text"
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                this.initiateClient()
+    }) => {
+      const [textVal, setTextVal] = useState('')
+
+      return (
+        <Drawer anchor="right" variant="permanent">
+          {/* <Divider horizontal>Color</Divider> */}
+          {/* <List disablePadding> */}
+          <textarea
+            value={textVal}
+            onChange={(e) => {
+              setTextVal(e.target.value)
+            }}
+          />
+          <Button
+            onClick={() => {
+              console.log('Decompressed: ', decompressFromBase64(textVal))
+              const compressedInfo = decompressFromBase64(textVal)
+              if (!compressedInfo) {
+                return
+              }
+              const data = JSON.parse(compressedInfo)
+              if (data && 'grid' in data) {
+                this.processImport(data)
               }
             }}
-            onChange={(event) => {
-              this.setState({ hostInputValue: event.target.value })
-            }}
-            value={hostInputValue}
           />
-          <span style={{ float: 'right' }}>
-            {host
-              ? 'CLIENT'
-              : Object.keys(clients).length !== 0
-              ? 'HOST'
-              : 'NOT CONNECTED'}
+          <CompactPicker
+            colors={[
+              '#FFFFFF',
+              '#f3c693',
+              '#ff7575',
+              '#FE9200',
+              '#FCDC00',
+              '#f3fb7f',
+              '#DBDF00',
+              '#8cd2b1',
+              '#80EFFF',
+              '#2EEFFF',
+              '#AEA1FF',
+              '#FDA1FF',
+              //
+              '#B3B3B3',
+              '#ffbeb1',
+              '#FF492A',
+              '#E27300',
+              '#FCC400',
+              '#B0BC00',
+              '#A4DD00',
+              '#00FB83',
+              '#68CCCA',
+              '#6AC7FF',
+              '#D579FF',
+              '#FA28FF',
+              //
+              '#000000',
+              '#ef9173',
+              '#ff0000',
+              '#ff4d00',
+              '#FB9E00',
+              '#68BC00',
+              '#00fb1d',
+              '#30C18A',
+              '#16A5A5',
+              '#009CE0',
+              '#7B64FF',
+              '#AB149E',
+            ]}
+            styles={{
+              default: {
+                // clear: { color: '#ffffff' },
+                compact: {
+                  // justifySelf: 'stretch',
+                  backgroundColor: '#e8e8e8',
+                  // marginLeft: 'auto',
+                  // left: 'auto',
+                  // transform: 'translateX(-50%)',
+                  // marginRight: 'auto',
+                },
+                // Compact: { color: '#ffffff' },
+              },
+            }}
+            color={pickingMe ? myColor : selectorColor}
+            onChangeComplete={(color) => {
+              if (pickingMe) {
+                this.updateUserdata({ color: color.hex })
+                localStorage.color = color.hex
+              } else {
+                this.setState({ selectorColor: color.hex })
+                this.updateSelected((cell) => {
+                  cell.color = color.hex
+                })
+              }
+            }}
+          />
+          <Accordion>
+            <AccordionSummary expandIcon={<ExpandMore />}>
+              <Typography>Multiplayer</Typography>
+            </AccordionSummary>
+            <AccordionDetails>
+              <TextField id="filled-basic" label="Filled" variant="filled" />
+            </AccordionDetails>
+          </Accordion>
+          <Accordion>
+            <AccordionSummary expandIcon={<ExpandMore />}>
+              <Typography>Settings</Typography>
+            </AccordionSummary>
+            <AccordionDetails></AccordionDetails>
+          </Accordion>
+          <ListItem>testing dis shiz</ListItem>
+          <ListItem>testing big time</ListItem>
+          <ListItem>testing lets go</ListItem>
+          <ListItem>testing dis shiz</ListItem>
+          <ListItem>testing dis shiz</ListItem>
+          {/* </List> */}
+          <Button
+            onClick={(event) => {
+              this.setState((state) => ({ pickingMe: !state.pickingMe }))
+            }}
+            style={{ backgroundColor: myColor }}
+          >
+            {pickingMe ? 'Picking my color...' : 'Pick my color'}{' '}
+          </Button>
+          <Divider horizontal>File</Divider>
+          <input type="file" id="upload-button" onChange={this.fileInput} />
+          <Divider horizontal>Multiplayer</Divider>
+          ID: {onlineId} <br />
+          <span>
+            <input
+              // type="text"
+              onKeyDown={(event) => {
+                if (event.key === 'Enter') {
+                  this.initiateClient()
+                }
+              }}
+              onChange={(event) => {
+                this.setState({ hostInputValue: event.target.value })
+              }}
+              value={hostInputValue}
+            />
+            <span style={{ float: 'right' }}>
+              {host
+                ? 'CLIENT'
+                : Object.keys(clients).length !== 0
+                ? 'HOST'
+                : 'NOT CONNECTED'}
+            </span>
           </span>
-        </span>
-        <br />
-        {this.state.host && 'Host is: ' + this.state.host.peer}
-        {Object.keys(clients).length !== 0 &&
-          'Clients are: ' + Object.keys(clients).join(', ')}
-        <Divider horizontal>Notes</Divider>
-        <TextareaAutosize />
-      </Drawer>
-    ),
+          <br />
+          {this.state.host && 'Host is: ' + this.state.host.peer}
+          {Object.keys(clients).length !== 0 &&
+            'Clients are: ' + Object.keys(clients).join(', ')}
+          <Divider horizontal>Notes</Divider>
+          <TextareaAutosize />
+        </Drawer>
+      )
+    },
   )
 
   render = () => {
