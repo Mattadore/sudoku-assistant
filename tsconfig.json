@@ -5,11 +5,12 @@
     "noImplicitAny": true,
     "module": "commonjs",
     "target": "esnext",
-    "jsx": "react",
-    "strict": false,
-    "lib": ["dom", "es2015", "es2017"],
-    "types": ["@emotion/core"],
-    "esModuleInterop": true
+    "jsx": "react-jsx",
+    "jsxImportSource": "@emotion/react",
+    "strict": true,
+    "lib": ["dom", "ES2022"],
+    "esModuleInterop": true,
+    "paths": {"components": ["./src/components"], "helper": ["./src/helper.tsx"]}
   },
-  "include": ["./src/**/*"]
+  "include": ["./src/**/*", "./gatsby-node.ts", "./gatsby-config.ts", "./plugins/**/*"]
 }
