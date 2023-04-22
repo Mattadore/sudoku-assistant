@@ -553,6 +553,7 @@ class Page extends React.Component<{}, PageState> {
 
   // Process data from clients
   hostProcessData = (id: string, data: ClientToHostData) => {
+    console.log('HPD')
     if (!data || Object.keys(data).length === 0) {
       console.error('Empty data received')
       return
@@ -575,16 +576,11 @@ class Page extends React.Component<{}, PageState> {
 
   // HOST connection setup
   connectionCallback = (conn: DataConnection) => {
-    this.setState((state) => ({
-      clients: {
-        ...state.clients,
-        [conn.peer]: conn,
-      },
-    }))
     conn.on('close', () => {
       console.log('CLOSING')
       this.setState((state) => {
-        let [clientId, { [conn.peer]: toDel, ...out }] = state.clients
+        let out = new Map(state.clients)
+        out.delete(conn.peer)
         return {
           clients: out,
         }
@@ -592,6 +588,13 @@ class Page extends React.Component<{}, PageState> {
     })
     //When we have a client joining our hosted session
     conn.on('open', () => {
+      this.setState((state) => {
+        let out = new Map(state.clients)
+        out.set(conn.peer, conn)
+        return {
+          clients: out,
+        }
+      })
       this.sendDataToClient(conn, {
         state: this.boardStates[this.state.boardStateIndex],
         userdataMap: {
@@ -603,10 +606,9 @@ class Page extends React.Component<{}, PageState> {
             image: { file: this.currentFile, filetype: this.currentFileType },
           }),
       })
-      conn.on('data', (data) => {
-        this.hostProcessData(conn.peer, data as ClientToHostData)
-      })
-      this.setState((state) => ({ clientIds: [...state.clientIds, conn.peer] }))
+    })
+    conn.on('data', (data) => {
+      this.hostProcessData(conn.peer, data as ClientToHostData)
     })
   }
 
@@ -661,8 +663,7 @@ class Page extends React.Component<{}, PageState> {
   }
 
   pageClicked = () => {
-    this.setState({ selectorIndex: null })
-    this.sendUpdate({ pointer: null })
+    this.updateUserdata({ selectorIndex: null })
   }
 
   initializePeer = async () => {
@@ -704,16 +705,16 @@ class Page extends React.Component<{}, PageState> {
       selectedColor,
       onlineId,
       hostIdText,
-      clientIds,
-      connections,
+      clients,
+      host,
     }: {
       pickingMe: boolean
       myData: Userdata
       selectedColor: string
       onlineId: string
       hostIdText: string
-      clientIds: string[]
-      connections: { [key: string]: DataConnection }
+      clients: Map<string, DataConnection>
+      host: DataConnection | null
     }) => (
       <SidebarContainer>
         <Divider horizontal>Color</Divider>
@@ -723,11 +724,8 @@ class Page extends React.Component<{}, PageState> {
           onChangeComplete={(color) => {
             // setColor(color.hex)
             if (pickingMe) {
-              this.setState((state) => ({
-                myUserdata: { ...state.myUserdata, color: color.hex },
-                pickingMe: false,
-              }))
-              this.sendUpdate({ color: color.hex })
+              this.setState({ pickingMe: false })
+              this.updateUserdata({ color: color.hex })
               localStorage.color = color.hex
             } else {
               this.setState({ selectedColor: color.hex })
@@ -741,7 +739,7 @@ class Page extends React.Component<{}, PageState> {
           onClick={(event) => {
             this.setState((state) => ({ pickingMe: !state.pickingMe }))
           }}
-          style={{ backgroundColor: myColor }}
+          style={{ backgroundColor: myData.color }}
         >
           {pickingMe ? 'Picking my color...' : 'Pick my color'}{' '}
         </Button>
@@ -763,16 +761,18 @@ class Page extends React.Component<{}, PageState> {
             value={hostIdText}
           />
           <span style={{ float: 'right' }}>
-            {Object.keys(connections).length !== 0
-              ? clientIds.length !== 0
-                ? 'HOST'
-                : 'CLIENT'
+            {clients.size !== 0
+              ? 'HOST'
+              : host != null
+              ? 'CLIENT'
               : 'NOT CONNECTED'}
           </span>
         </span>
         <br />
         {this.state.hostId && 'Host is: ' + this.state.hostId}
-        {clientIds.length !== 0 && 'Clients are: ' + clientIds.join(', ')}
+        {clients.size !== 0 &&
+          'Clients are: ' +
+            Array.from(clients, ([name, value]) => name).join(', ')}
         {/* <Divider horizontal>Notes</Divider> */}
         <Accordion>
           {/* <DragDropContext onDragEnd={() => {}}>
@@ -801,6 +801,8 @@ class Page extends React.Component<{}, PageState> {
       selectedColor,
       hostIdText,
       conflicts,
+      clients,
+      host,
     } = this.state
 
     return (
@@ -839,12 +841,16 @@ class Page extends React.Component<{}, PageState> {
                     ...out,
                     ...rowData.map((cell, column) => {
                       const index = row + ',' + column
-                      const selectorConnKey = Object.keys(multiUserdata).filter(
+                      const selectorConnKeys = Object.keys(
+                        multiUserdata,
+                      ).filter(
                         (key) =>
                           key !== onlineId &&
                           multiUserdata[key].selectorIndex === index,
                       )
-                      const selectedConnKey = Object.keys(multiUserdata).filter(
+                      const selectedConnKeys = Object.keys(
+                        multiUserdata,
+                      ).filter(
                         (key) =>
                           key !== onlineId &&
                           multiUserdata[key]?.selectedIndices?.includes(index),
@@ -858,17 +864,17 @@ class Page extends React.Component<{}, PageState> {
                           conflict={conflicts[index]}
                           selectedColor={
                             // Check if in the list
-                            selectedIndices.includes(index)
-                              ? myColor
-                              : selectedConnKey !== undefined
-                              ? multiColors[selectedConnKey]
+                            myUserdata.selectedIndices.includes(index)
+                              ? myUserdata.color
+                              : selectedConnKeys.length > 0
+                              ? multiUserdata[selectedConnKeys[0]].color
                               : null
                           }
-                          selectedColor={
-                            selectorIndex === index
-                              ? myColor
-                              : selectorConnKey !== undefined
-                              ? multiColors[selectorConnKey]
+                          selectorColor={
+                            myUserdata.selectorIndex === index
+                              ? myUserdata.color
+                              : selectorConnKeys.length > 0
+                              ? multiUserdata[selectorConnKeys[0]].color
                               : null
                           }
                           data={cell}

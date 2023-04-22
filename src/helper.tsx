@@ -205,7 +205,8 @@ const recursiveMerge = <T,>(obj: T, diff: Diff<T>) => {
     if (
       typeof value == 'boolean' ||
       typeof value == 'number' ||
-      typeof value == 'string'
+      typeof value == 'string' ||
+      value == null
     ) {
       obj[key as keyof T] = value as any
     } else if (value instanceof Array) {
@@ -289,7 +290,8 @@ export const validate = (
       }
     }
   }
-  const extensionConflicts = extensionManager.validate(board)
+  //TODO: make this granular and move above logic into extension
+  const extensionConflicts = extensionManager.getBoardConflicts(board)
   for (const conflict in extensionConflicts) {
     conflicts[conflict] = true
   }
