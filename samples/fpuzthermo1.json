@@ -1,0 +1,261 @@
+{
+  "size": 9,
+  "title": "Mephisto",
+  "author": "SpiritoGiovane",
+  "ruleset": "Normal sudoku rules apply. Digits increase along a thermometer starting from the bulb end. The digits on a purple line form a non-repeating, consecutive set. These digits can appear in any order.\n\nNote: the celll R7C4 is both the tip of the thermo descending from box 5 and the diagonal thermo of box 8.",
+  "grid": [
+    [
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {}
+    ],
+    [
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {}
+    ],
+    [
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {}
+    ],
+    [
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {}
+    ],
+    [
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {}
+    ],
+    [
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {}
+    ],
+    [
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {}
+    ],
+    [
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {}
+    ],
+    [
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {}
+    ]
+  ],
+  "thermometer": [
+    {
+      "lines": [
+        [
+          "R1C2",
+          "R2C2",
+          "R3C2",
+          "R4C1",
+          "R5C1"
+        ]
+      ]
+    },
+    {
+      "lines": [
+        [
+          "R5C2",
+          "R6C1",
+          "R7C1"
+        ]
+      ]
+    },
+    {
+      "lines": [
+        [
+          "R5C5",
+          "R6C4",
+          "R7C4"
+        ]
+      ]
+    },
+    {
+      "lines": [
+        [
+          "R9C6",
+          "R8C5",
+          "R7C4"
+        ]
+      ]
+    },
+    {
+      "lines": [
+        [
+          "R9C5",
+          "R8C5",
+          "R7C5",
+          "R6C6",
+          "R5C6"
+        ]
+      ]
+    },
+    {
+      "lines": [
+        [
+          "R5C8",
+          "R6C9",
+          "R7C9"
+        ]
+      ]
+    },
+    {
+      "lines": [
+        [
+          "R1C8",
+          "R2C8",
+          "R3C8",
+          "R4C9",
+          "R5C9"
+        ]
+      ]
+    },
+    {
+      "lines": [
+        [
+          "R1C6",
+          "R2C5",
+          "R3C4"
+        ]
+      ]
+    }
+  ],
+  "line": [
+    {
+      "lines": [
+        [
+          "R1C5",
+          "R2C5",
+          "R3C5",
+          "R4C4",
+          "R5C4"
+        ]
+      ],
+      "outlineC": "#FF00F2",
+      "width": 0.3
+    },
+    {
+      "lines": [
+        [
+          "R3C6",
+          "R4C6",
+          "R5C5"
+        ]
+      ],
+      "outlineC": "#FF00F2",
+      "width": 0.3
+    },
+    {
+      "lines": [
+        [
+          "R5C3",
+          "R6C3",
+          "R7C2",
+          "R8C3",
+          "R9C4"
+        ]
+      ],
+      "outlineC": "#FF00F2",
+      "width": 0.3
+    },
+    {
+      "lines": [
+        [
+          "R5C7",
+          "R6C7",
+          "R7C8",
+          "R8C7",
+          "R9C6"
+        ]
+      ],
+      "outlineC": "#FF00F2",
+      "width": 0.3
+    },
+    {
+      "lines": [
+        [
+          "R7C1",
+          "R8C2",
+          "R9C1"
+        ]
+      ],
+      "outlineC": "#FF00F2",
+      "width": 0.3
+    },
+    {
+      "lines": [
+        [
+          "R7C9",
+          "R8C8",
+          "R9C9"
+        ]
+      ],
+      "outlineC": "#FF00F2",
+      "width": 0.3
+    }
+  ]
+}
