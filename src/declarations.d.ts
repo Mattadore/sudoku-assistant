@@ -1,5 +1,10 @@
 declare const graphql: (query: TemplateStringsArray) => void
 
+// like Partial<> but recursive
+type Diff<T> = {
+  [P in keyof T]?: Diff<T[P]>
+}
+
 interface CellData {
   number: number | null
   center: Array<number>
@@ -7,11 +12,19 @@ interface CellData {
   color: string | null
 }
 
-type CellDiff = Partial<CellData>
+interface Userdata {
+  selectorIndex: string | null
+  selectedIndices: string[]
+  color: string
+}
+
+type CellDiff = Diff<CellData>
 
 type BoardState = CellData[][]
 
 type ConflictList = { [key: string]: true }
+
+type BoardIndex = [row: number, column: number]
 
 interface SolverExtension {
   extensionName: string

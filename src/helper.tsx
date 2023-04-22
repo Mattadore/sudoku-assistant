@@ -1,5 +1,6 @@
 import * as React from 'react'
 import chroma from 'chroma-js'
+import produce from 'immer'
 import { SolverExtensionManager } from 'solver-extensions'
 
 // get a differential tree btwn two states
@@ -7,6 +8,34 @@ export const getDiff = (
   starting: CellData[][],
   updated: CellData[][],
 ): { [key: string]: CellDiff } => {
+  const diff: { [key: string]: CellDiff } = {}
+  for (const row in updated) {
+    if (starting[row] === updated[row]) continue
+    for (const column in updated[row]) {
+      if (starting[row][column] !== updated[row][column]) {
+        const diffkey = row + ',' + column
+        diff[diffkey] = {}
+        let prop: keyof CellData
+        for (prop in updated[row][column]) {
+          if (updated[row][column][prop] !== starting[row][column][prop]) {
+            // ts does not know how to handle this
+            ;(diff[diffkey][prop] as any) = updated[row][column][prop] as any
+          }
+        }
+        if (Object.keys(diff[diffkey]).length === 0) {
+          delete diff[diffkey]
+        }
+      }
+    }
+  }
+
+  return diff
+}
+
+export const getUserDiff = (
+  starting: Userdata,
+  updated: Userdata,
+): Diff<Userdata> => {
   const diff: { [key: string]: CellDiff } = {}
   for (const row in updated) {
     if (starting[row] === updated[row]) continue
@@ -169,6 +198,28 @@ export const getPixel = (imgData: ImageData, index: number) => {
 
 export const splitIndex = (index: string) => {
   return index.split(',').map((i) => parseInt(i))
+}
+
+const recursiveMerge = <T,>(obj: T, diff: Diff<T>) => {
+  for (let [key, value] of Object.entries(diff)) {
+    if (
+      typeof value == 'boolean' ||
+      typeof value == 'number' ||
+      typeof value == 'string'
+    ) {
+      obj[key as keyof T] = value as any
+    } else if (value instanceof Array) {
+      obj[key as keyof T] = value as any
+    } else {
+      recursiveMerge((obj as any)[key], value as any)
+    }
+  }
+}
+
+export const merge = <T,>(obj: T, diff: Diff<T>) => {
+  return produce(obj, (draft) => {
+    recursiveMerge(draft as T, diff)
+  })
 }
 
 export const validate = (

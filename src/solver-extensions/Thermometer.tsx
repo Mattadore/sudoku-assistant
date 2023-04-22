@@ -1,5 +1,5 @@
 // [thermo#][segment#][1: row, 2: col]
-type ThermoData = number[][][]
+type ThermoData = BoardIndex[][]
 
 type FpuzzleThermoData = {
   lines: string[][]

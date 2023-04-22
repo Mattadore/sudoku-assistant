@@ -6,7 +6,7 @@ import { CompactPicker } from 'react-color'
 import styled from '@emotion/styled'
 import produce from 'immer'
 import { Divider, Button, Accordion } from 'semantic-ui-react'
-import { getDiff, preprocessImage, validate } from 'helper'
+import { getDiff, preprocessImage, validate, merge } from 'helper'
 import { GridCell } from 'components'
 import type { Peer, DataConnection } from 'peerjs'
 import { SolverExtensionManager, Extensions } from 'solver-extensions'
@@ -144,9 +144,7 @@ const colorPickerColors = [
 
 type HostToClientData = {
   state?: BoardState
-  pointerMap?: { [connectionKey: string]: string | null }
-  colorMap?: { [connectionKey: string]: string }
-  selectedMap?: { [connectionKey: string]: string[] }
+  userdataMap?: { [connectionKey: string]: Diff<Userdata> }
   image?: {
     file: Blob
     filetype: string
@@ -154,26 +152,20 @@ type HostToClientData = {
 }
 
 type ClientToHostData = {
-  pointer?: string | null
-  selected?: string[]
+  userdataDiff?: Diff<Userdata>
   boardupdate?: { [key: string]: CellDiff }
-  color?: string
 }
 
 interface PageState {
-  selectorIndex: string | null
-  multiSelectorIndices: { [key: string]: string | null }
-  selectedIndices: string[]
-  multiSelectedIndices: { [key: string]: string[] }
-  multiColors: { [key: string]: string }
-  connections: { [key: string]: DataConnection }
+  multiUserdata: { [key: string]: Userdata }
+  myUserdata: Userdata
+  selectedColor: string
+  host: DataConnection | null
+  clients: Map<string, DataConnection>
   conflicts: { [key: string]: boolean }
   pickingMe: boolean
-  myColor: string
-  selectorColor: string
   boardStateIndex: number
   onlineId: string
-  clientIds: string[]
   hostId: string | null
   hostIdText: string
   image: {
@@ -188,24 +180,24 @@ interface PageState {
 
 class Page extends React.Component<{}, PageState> {
   state: PageState = {
-    selectorIndex: null,
-    multiSelectorIndices: {},
-    selectedIndices: [],
-    multiSelectedIndices: {},
-    multiColors: {},
-    connections: {},
+    multiUserdata: {},
+    myUserdata: {
+      selectedIndices: [],
+      selectorIndex: null,
+      color:
+        isBrowser && typeof localStorage.color === 'string'
+          ? localStorage.color
+          : '#ffcc00',
+    },
+    selectedColor: '#ffffff',
+    host: null,
+    clients: new Map(),
     conflicts: {},
     pickingMe: false,
-    myColor:
-      isBrowser && typeof localStorage.color === 'string'
-        ? localStorage.color
-        : '#ffcc00',
-    selectorColor: '#ffffff',
     boardStateIndex: 0,
     onlineId: 'offline',
     hostId: null,
     hostIdText: '',
-    clientIds: [],
     image: {
       leftEdge: 0,
       rightEdge: 0,
@@ -240,8 +232,23 @@ class Page extends React.Component<{}, PageState> {
     }
   }
 
+  updateUserdata = (update: Diff<Userdata>) => {
+    // this.setState((state) => ({
+    //   myUserdata: produce(state.myUserdata, update),
+    // }))
+    this.setState((state) => ({
+      myUserdata: merge(state.myUserdata, update),
+    }))
+    const { host, clients } = this.state
+    if (host !== null) {
+      this.updateHost({ userdataDiff: update })
+    } else {
+      this.updateClients({ userdataMap: { [this.state.onlineId]: update } })
+    }
+  }
+
   mutateBoard = (update: (method: BoardState) => void): void => {
-    const { boardStateIndex, clientIds, connections } = this.state
+    const { boardStateIndex, clients } = this.state
     //useCallback(
     const out = produce(
       this.boardStates[boardStateIndex],
@@ -252,20 +259,22 @@ class Page extends React.Component<{}, PageState> {
 
     this.boardStates.splice(boardStateIndex + 1, this.boardStates.length)
     this.boardStates.push(out)
-    if (clientIds.length !== 0) {
-      this.updateClients({ state: out })
-    } else if (this.state.hostId !== null) {
+    if (this.state.hostId !== null) {
       const diff = getDiff(this.boardStates[boardStateIndex], out)
       console.log('DIFF:', diff)
       this.updateHost({ boardupdate: diff })
+    } else {
+      for (let client of clients) {
+        this.updateClients({ state: out })
+      }
     }
 
     this.setState((state) => ({ boardStateIndex: state.boardStateIndex + 1 }))
   }
 
   // useful to give host init better typing
-  sendDataToHost = (client: DataConnection, payload: ClientToHostData) => {
-    client.send(payload)
+  sendDataToHost = (host: DataConnection, payload: ClientToHostData) => {
+    host.send(payload)
   }
 
   // useful to give client init better typing
@@ -274,51 +283,49 @@ class Page extends React.Component<{}, PageState> {
   }
 
   updateHost = (payload: ClientToHostData) => {
-    if (this.state.hostId) {
-      this.sendDataToHost(this.state.connections[this.state.hostId], payload)
+    if (this.state.host) {
+      this.sendDataToHost(this.state.host, payload)
     }
   }
 
   updateClients = (payload: HostToClientData) => {
-    if (this.state.clientIds.length !== 0) {
-      for (const clientId of this.state.clientIds) {
-        this.sendDataToClient(this.state.connections[clientId], payload)
-      }
+    for (const [clientId, client] of this.state.clients) {
+      this.sendDataToClient(client, payload)
     }
   }
 
-  sendUpdate = (payload: ClientToHostData) => {
-    if (this.state.clientIds.length !== 0) {
-      this.hostProcessData(this.state.onlineId, payload)
-    }
-    this.updateHost(payload)
-  }
+  // sendUpdate = (payload: ClientToHostData) => {
+  //   if (this.state.clients.size !== 0) {
+  //     this.hostProcessData(this.state.onlineId, payload)
+  //   }
+  //   this.updateHost(payload)
+  // }
 
   select = (
     index: string,
     event: KeyboardEvent | React.MouseEvent<HTMLDivElement, MouseEvent>,
     multi = false,
   ) => {
-    const { connections, selectedIndices, image } = this.state
+    const { myUserdata, image } = this.state
     if (!event.altKey) {
-      this.setState({ selectorIndex: index })
-      this.sendUpdate({ pointer: index })
+      this.updateUserdata({ selectorIndex: index })
     }
     if (event.ctrlKey) {
-      if (selectedIndices.includes(index)) {
-        const selected = this.state.selectedIndices.filter(
-          (value) => value !== index,
-        )
-        this.setState({ selectedIndices: selected })
-        this.sendUpdate({ selected })
+      if (myUserdata.selectedIndices.includes(index)) {
+        this.updateUserdata({
+          selectedIndices: myUserdata.selectedIndices.filter(
+            (value) => value !== index,
+          ),
+        })
       }
     } else if (event.shiftKey || multi) {
       if (
-        typeof selectedIndices.find((value) => value === index) === 'undefined'
+        typeof myUserdata.selectedIndices.find((value) => value === index) ===
+        'undefined'
       ) {
-        const selected = this.state.selectedIndices.concat(index)
-        this.setState({ selectedIndices: selected })
-        this.sendUpdate({ selected })
+        this.updateUserdata({
+          selectedIndices: myUserdata.selectedIndices.concat(index),
+        })
       }
     } else if (event.altKey) {
       if (!image.imageData) {
@@ -346,15 +353,14 @@ class Page extends React.Component<{}, PageState> {
           const color = chroma([
             ...context.getImageData(x, y, 1, 1).data.slice(0, 3),
           ])
-          this.setState({ selectorColor: color.hex() })
+          this.setState({ selectedColor: color.hex() })
           this.mutateSelectedCells((cell) => {
             cell.color = color.hex()
           })
         }
       }
     } else {
-      this.setState({ selectedIndices: [index] })
-      this.sendUpdate({ selected: [index] })
+      this.updateUserdata({ selectedIndices: [index] })
     }
   }
 
@@ -371,7 +377,7 @@ class Page extends React.Component<{}, PageState> {
 
   // Applies a transformation to all selected cells
   mutateSelectedCells = (update: (cell: CellData) => void): void => {
-    const { selectedIndices } = this.state
+    const { selectedIndices } = this.state.myUserdata
     this.mutateBoard((cells) => {
       for (const selected of selectedIndices) {
         const [row, column] = selected.split(',').map((i) => parseInt(i))
@@ -381,8 +387,8 @@ class Page extends React.Component<{}, PageState> {
   }
 
   keyCallback = (event: KeyboardEvent) => {
-    const { selectorIndex, boardStateIndex, connections } = this.state
-    if (selectorIndex === null) {
+    const { myUserdata, boardStateIndex } = this.state
+    if (myUserdata.selectorIndex === null) {
       return
     }
     // Use regex to test if digit btwn 1-9
@@ -429,7 +435,9 @@ class Page extends React.Component<{}, PageState> {
       return
     }
 
-    const [row, column] = selectorIndex.split(',').map((i) => parseInt(i))
+    const [row, column] = myUserdata.selectorIndex
+      .split(',')
+      .map((i) => parseInt(i))
     switch (event.key) {
       case 'y':
         if (
@@ -464,10 +472,7 @@ class Page extends React.Component<{}, PageState> {
                 ',' +
                 Math.floor(index / this.numColumns),
             )
-          this.setState({
-            selectedIndices: allIndices,
-          })
-          this.sendUpdate({ selected: allIndices })
+          this.updateUserdata({ selectedIndices: allIndices })
         }
         break
       case 'ArrowLeft':
@@ -552,23 +557,11 @@ class Page extends React.Component<{}, PageState> {
       console.error('Empty data received')
       return
     }
-    if (data.pointer !== undefined) {
-      this.setState({
-        multiSelectorIndices: {
-          ...this.state.multiSelectorIndices,
-          [id]: data.pointer,
-        },
-      })
-      this.updateClients({ pointerMap: { [id]: data.pointer } })
-    }
-    if (data.selected !== undefined) {
-      this.setState({
-        multiSelectedIndices: {
-          ...this.state.multiSelectedIndices,
-          [id]: data.selected,
-        },
-      })
-      this.updateClients({ selectedMap: { [id]: data.selected } })
+    if (data.userdataDiff !== undefined) {
+      this.setState((state) => ({
+        multiUserdata: merge(state.multiUserdata, { id: data.userdataDiff }),
+      }))
+      this.updateClients({ userdataMap: { id: data.userdataDiff } })
     }
     if (data.boardupdate !== undefined) {
       this.mutateBoard((cells) => {
@@ -578,32 +571,22 @@ class Page extends React.Component<{}, PageState> {
         }
       })
     }
-    if (data.color !== undefined) {
-      this.setState({
-        multiColors: {
-          ...this.state.multiColors,
-          [id]: data.color,
-        },
-      })
-      this.updateClients({ colorMap: { [id]: data.color } })
-    }
   }
 
   // HOST connection setup
   connectionCallback = (conn: DataConnection) => {
     this.setState((state) => ({
-      connections: {
-        ...state.connections,
+      clients: {
+        ...state.clients,
         [conn.peer]: conn,
       },
     }))
     conn.on('close', () => {
       console.log('CLOSING')
       this.setState((state) => {
-        let { [conn.peer]: toDel, ...out } = state.connections
+        let [clientId, { [conn.peer]: toDel, ...out }] = state.clients
         return {
-          connections: out,
-          clientIds: state.clientIds.filter((id) => id !== conn.peer),
+          clients: out,
         }
       })
     })
@@ -611,17 +594,9 @@ class Page extends React.Component<{}, PageState> {
     conn.on('open', () => {
       this.sendDataToClient(conn, {
         state: this.boardStates[this.state.boardStateIndex],
-        pointerMap: {
-          ...this.state.multiSelectorIndices,
-          [this.state.onlineId]: this.state.selectorIndex,
-        },
-        selectedMap: {
-          ...this.state.multiSelectedIndices,
-          [this.state.onlineId]: this.state.selectedIndices,
-        },
-        colorMap: {
-          ...this.state.multiColors,
-          [this.state.onlineId]: this.state.myColor,
+        userdataMap: {
+          ...this.state.multiUserdata,
+          [this.state.onlineId]: this.state.myUserdata,
         },
         ...(this.currentFile &&
           this.currentFileType && {
@@ -647,9 +622,7 @@ class Page extends React.Component<{}, PageState> {
     //When we join a remote server
     conn.on('open', () => {
       this.sendDataToHost(conn, {
-        color: this.state.myColor,
-        pointer: this.state.selectorIndex,
-        selected: this.state.selectedIndices,
+        userdataDiff: this.state.myUserdata,
       })
 
       conn.on('data', (rawdata) => {
@@ -658,19 +631,11 @@ class Page extends React.Component<{}, PageState> {
           console.error('Empty data received')
           return
         }
-        if (data.pointerMap !== undefined) {
+        if (data.userdataMap !== undefined) {
           this.setState((state) => ({
-            multiSelectorIndices: {
-              ...state.multiSelectorIndices,
-              ...data.pointerMap,
-            },
-          }))
-        }
-        if (data.selectedMap !== undefined) {
-          this.setState((state) => ({
-            multiSelectedIndices: {
-              ...state.multiSelectedIndices,
-              ...data.selectedMap,
+            multiUserdata: {
+              ...state.multiUserdata,
+              [this.state.onlineId]: this.state.myUserdata,
             },
           }))
         }
@@ -687,22 +652,11 @@ class Page extends React.Component<{}, PageState> {
           this.currentFile = blob
           this.imageLoad(blob)
         }
-        if (data.colorMap) {
-          this.setState((state) => ({
-            multiColors: {
-              ...state.multiColors,
-              ...data.colorMap,
-            },
-          }))
-        }
       })
     })
     this.setState((state) => ({
       hostId,
-      connections: {
-        ...state.connections,
-        [hostId]: conn,
-      },
+      host: conn,
     }))
   }
 
@@ -746,16 +700,16 @@ class Page extends React.Component<{}, PageState> {
   Sidebar = React.memo(
     ({
       pickingMe,
-      myColor,
-      selectorColor,
+      myData,
+      selectedColor,
       onlineId,
       hostIdText,
       clientIds,
       connections,
     }: {
       pickingMe: boolean
-      myColor: string
-      selectorColor: string
+      myData: Userdata
+      selectedColor: string
       onlineId: string
       hostIdText: string
       clientIds: string[]
@@ -765,15 +719,18 @@ class Page extends React.Component<{}, PageState> {
         <Divider horizontal>Color</Divider>
         <CompactPicker
           colors={colorPickerColors}
-          color={pickingMe ? myColor : selectorColor}
+          color={pickingMe ? myData.color : selectedColor}
           onChangeComplete={(color) => {
             // setColor(color.hex)
             if (pickingMe) {
-              this.setState({ myColor: color.hex, pickingMe: false })
+              this.setState((state) => ({
+                myUserdata: { ...state.myUserdata, color: color.hex },
+                pickingMe: false,
+              }))
               this.sendUpdate({ color: color.hex })
               localStorage.color = color.hex
             } else {
-              this.setState({ selectorColor: color.hex })
+              this.setState({ selectedColor: color.hex })
               this.mutateSelectedCells((cell) => {
                 cell.color = color.hex
               })
@@ -837,18 +794,12 @@ class Page extends React.Component<{}, PageState> {
     const {
       image,
       boardStateIndex,
-      myColor,
+      myUserdata,
+      multiUserdata,
       pickingMe,
       onlineId,
-      selectedIndices,
-      selectorIndex,
-      selectorColor,
-      multiColors,
-      multiSelectedIndices,
-      multiSelectorIndices,
+      selectedColor,
       hostIdText,
-      clientIds,
-      connections,
       conflicts,
     } = this.state
 
@@ -888,19 +839,15 @@ class Page extends React.Component<{}, PageState> {
                     ...out,
                     ...rowData.map((cell, column) => {
                       const index = row + ',' + column
-                      const selectorConnKey = Object.keys(
-                        multiSelectorIndices,
-                      ).find(
+                      const selectorConnKey = Object.keys(multiUserdata).filter(
                         (key) =>
                           key !== onlineId &&
-                          multiSelectorIndices[key] === index,
+                          multiUserdata[key].selectorIndex === index,
                       )
-                      const selectedConnKey = Object.keys(
-                        multiSelectedIndices,
-                      ).find(
+                      const selectedConnKey = Object.keys(multiUserdata).filter(
                         (key) =>
                           key !== onlineId &&
-                          multiSelectedIndices[key].includes(index),
+                          multiUserdata[key]?.selectedIndices?.includes(index),
                       )
                       return (
                         <GridCell
@@ -917,7 +864,7 @@ class Page extends React.Component<{}, PageState> {
                               ? multiColors[selectedConnKey]
                               : null
                           }
-                          selectorColor={
+                          selectedColor={
                             selectorIndex === index
                               ? myColor
                               : selectorConnKey !== undefined
@@ -939,12 +886,12 @@ class Page extends React.Component<{}, PageState> {
         </GridContainer>
         <this.Sidebar
           pickingMe={pickingMe}
-          myColor={myColor}
-          selectorColor={selectorColor}
+          myData={myUserdata}
+          selectedColor={selectedColor}
           onlineId={onlineId}
           hostIdText={hostIdText}
-          clientIds={clientIds}
-          connections={connections}
+          clients={clients}
+          host={host}
         />
       </PageContainer>
     )
