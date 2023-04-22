@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "allowJs": true,
     "outDir": "./dist/",
     "sourceMap": true,
     "noImplicitAny": true,
@@ -10,7 +11,7 @@
     "strict": true,
     "lib": ["dom", "ES2022"],
     "esModuleInterop": true,
-    "paths": {"components": ["./src/components"], "helper": ["./src/helper.tsx"]}
+    "paths": {"components": ["./src/components"], "external": ["./src/external"], "helper": ["./src/helper.tsx"], "solver-extensions": ["./src/solver-extensions"], }
   },
   "include": ["./src/**/*", "./gatsby-node.ts", "./gatsby-config.ts", "./plugins/**/*"]
 }

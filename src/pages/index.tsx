@@ -6,12 +6,14 @@ import { CompactPicker } from 'react-color'
 import styled from '@emotion/styled'
 import produce from 'immer'
 import { Divider, Button, Accordion } from 'semantic-ui-react'
-import { getDiff, preprocessImage } from 'helper'
+import { getDiff, preprocessImage, validate } from 'helper'
 import { GridCell } from 'components'
 import type { Peer, DataConnection } from 'peerjs'
+import { SolverExtensionManager, Extensions } from 'solver-extensions'
 
 // import { DragDropContext, Droppable, Draggable } from 'react-beautiful-dnd'
 import chroma from 'chroma-js'
+import { ReactNode } from 'react'
 
 // to generate all types from graphQL schema
 interface IndexPageProps {
@@ -141,10 +143,10 @@ const colorPickerColors = [
 ]
 
 type HostToClientData = {
-  state?: CellData[]
-  pointerMap?: { [connectionKey: string]: number | null }
+  state?: BoardState
+  pointerMap?: { [connectionKey: string]: string | null }
   colorMap?: { [connectionKey: string]: string }
-  selectedMap?: { [connectionKey: string]: number[] }
+  selectedMap?: { [connectionKey: string]: string[] }
   image?: {
     file: Blob
     filetype: string
@@ -152,20 +154,20 @@ type HostToClientData = {
 }
 
 type ClientToHostData = {
-  pointer?: number | null
-  selected?: number[]
+  pointer?: string | null
+  selected?: string[]
   boardupdate?: { [key: string]: CellDiff }
   color?: string
 }
 
 interface PageState {
-  selectorIndex: number | null
-  multiSelectorIndices: { [key: string]: number | null }
-  selectedIndices: number[]
-  multiSelectedIndices: { [key: string]: number[] }
+  selectorIndex: string | null
+  multiSelectorIndices: { [key: string]: string | null }
+  selectedIndices: string[]
+  multiSelectedIndices: { [key: string]: string[] }
   multiColors: { [key: string]: string }
   connections: { [key: string]: DataConnection }
-  conflicts: boolean[]
+  conflicts: { [key: string]: boolean }
   pickingMe: boolean
   myColor: string
   selectorColor: string
@@ -192,7 +194,7 @@ class Page extends React.Component<{}, PageState> {
     multiSelectedIndices: {},
     multiColors: {},
     connections: {},
-    conflicts: [],
+    conflicts: {},
     pickingMe: false,
     myColor:
       isBrowser && typeof localStorage.color === 'string'
@@ -215,28 +217,35 @@ class Page extends React.Component<{}, PageState> {
 
   peer: Peer | null = null
 
-  // const [layers, setLayers] = useState([1, 2])
-
-  boardStates: CellData[][] = [
-    Array(81)
-      .fill(1)
-      .map((value) => ({
-        number: null,
-        center: [],
-        corner: [],
-        color: null,
-      })),
-  ]
+  numRows = 9
+  numColumns = 9
+  boardStates: BoardState[] = [[]]
+  extensionManager = new SolverExtensionManager()
 
   currentFile: Blob | null = null
   currentFileType: string | null = null
 
-  mutateBoard = (update: (method: CellData[]) => void): void => {
+  constructor(props: PageState) {
+    super(props)
+    for (let row = 0; row < this.numRows; ++row) {
+      this.boardStates[0].push([])
+      for (let column = 0; column < this.numColumns; ++column) {
+        this.boardStates[0][row].push({
+          number: null,
+          center: [],
+          corner: [],
+          color: null,
+        })
+      }
+    }
+  }
+
+  mutateBoard = (update: (method: BoardState) => void): void => {
     const { boardStateIndex, clientIds, connections } = this.state
     //useCallback(
     const out = produce(
       this.boardStates[boardStateIndex],
-      (cellsDraft: Array<CellData>) => {
+      (cellsDraft: BoardState) => {
         update(cellsDraft)
       },
     )
@@ -286,7 +295,7 @@ class Page extends React.Component<{}, PageState> {
   }
 
   select = (
-    index: number,
+    index: string,
     event: KeyboardEvent | React.MouseEvent<HTMLDivElement, MouseEvent>,
     multi = false,
   ) => {
@@ -312,7 +321,6 @@ class Page extends React.Component<{}, PageState> {
         this.sendUpdate({ selected })
       }
     } else if (event.altKey) {
-      // console.log
       if (!image.imageData) {
         return
       }
@@ -338,7 +346,6 @@ class Page extends React.Component<{}, PageState> {
           const color = chroma([
             ...context.getImageData(x, y, 1, 1).data.slice(0, 3),
           ])
-          console.log('HSV:', color.hsv(), 'HCL:', color.hcl())
           this.setState({ selectorColor: color.hex() })
           this.mutateSelectedCells((cell) => {
             cell.color = color.hex()
@@ -351,54 +358,11 @@ class Page extends React.Component<{}, PageState> {
     }
   }
 
-  validate: (data: CellData[]) => boolean[] = (data) => {
-    let conflicts: boolean[] = Array(81).fill(false)
-    let arraySolution = []
-    const cellNumbers = data.map((cell) => cell.number)
-    for (let index = 0; index < 9; index++) {
-      arraySolution.push(cellNumbers.slice(index * 9, index * 9 + 9))
-    }
-
-    for (let y = 0; y < 9; y++) {
-      for (let x = 0; x < 9; x++) {
-        let value = arraySolution[y][x]
-        if (value) {
-          // Validate row
-          for (let x2 = x + 1; x2 < 9; x2++) {
-            if (arraySolution[y][x2] == value) {
-              conflicts[9 * y + x2] = true
-              conflicts[9 * y + x] = true
-            }
-          }
-
-          // Validate column
-          for (let y2 = y + 1; y2 < 9; y2++) {
-            if (arraySolution[y2][x] == value) {
-              conflicts[9 * y2 + x] = true
-              conflicts[9 * y + x] = true
-            }
-          }
-
-          // Validate square
-          let startY = Math.floor(y / 3) * 3
-          for (let y2 = startY; y2 < startY + 3; y2++) {
-            let startX = Math.floor(x / 3) * 3
-            for (let x2 = startX; x2 < startX + 3; x2++) {
-              if ((x2 != x || y2 != y) && arraySolution[y2][x2] == value) {
-                conflicts[9 * y2 + x2] = true
-              }
-            }
-          }
-        }
-      }
-    }
-    return conflicts
-  }
-
   componentDidUpdate = (prevProps: any, prevState: PageState) => {
     if (prevState.boardStateIndex !== this.state.boardStateIndex) {
-      const conflicts = this.validate(
+      const conflicts = validate(
         this.boardStates[this.state.boardStateIndex],
+        this.extensionManager,
       )
 
       this.setState((state) => ({ conflicts }))
@@ -408,9 +372,10 @@ class Page extends React.Component<{}, PageState> {
   // Applies a transformation to all selected cells
   mutateSelectedCells = (update: (cell: CellData) => void): void => {
     const { selectedIndices } = this.state
-    this.mutateBoard((cells: any) => {
-      for (let selected in selectedIndices) {
-        update(cells[selectedIndices[selected]])
+    this.mutateBoard((cells) => {
+      for (const selected of selectedIndices) {
+        const [row, column] = selected.split(',').map((i) => parseInt(i))
+        update(cells[row][column])
       }
     })
   }
@@ -464,6 +429,7 @@ class Page extends React.Component<{}, PageState> {
       return
     }
 
+    const [row, column] = selectorIndex.split(',').map((i) => parseInt(i))
     switch (event.key) {
       case 'y':
         if (
@@ -490,10 +456,14 @@ class Page extends React.Component<{}, PageState> {
       case 'a':
         if (event.ctrlKey) {
           event.preventDefault()
-          // equiv to [0..80]
-          const allIndices = Array(81)
+          const allIndices = Array(this.numRows * this.numColumns)
             .fill(0)
-            .map((v, index) => index)
+            .map(
+              (v, index) =>
+                (index % this.numRows) +
+                ',' +
+                Math.floor(index / this.numColumns),
+            )
           this.setState({
             selectedIndices: allIndices,
           })
@@ -501,23 +471,23 @@ class Page extends React.Component<{}, PageState> {
         }
         break
       case 'ArrowLeft':
-        if (selectorIndex % 9 > 0) {
-          this.select(selectorIndex - 1, event)
+        if (column > 0) {
+          this.select(row + ',' + (column - 1), event)
         }
         break
       case 'ArrowRight':
-        if (selectorIndex % 9 < 8) {
-          this.select(selectorIndex + 1, event)
+        if (column < this.numColumns - 1) {
+          this.select(row + ',' + (column + 1), event)
         }
         break
       case 'ArrowUp':
-        if (selectorIndex > 8) {
-          this.select(selectorIndex - 9, event)
+        if (row > 0) {
+          this.select(row - 1 + ',' + column, event)
         }
         break
       case 'ArrowDown':
-        if (selectorIndex < 72) {
-          this.select(selectorIndex + 9, event)
+        if (row < this.numRows - 1) {
+          this.select(row + 1 + ',' + column, event)
         }
         break
       case 'Delete':
@@ -582,7 +552,7 @@ class Page extends React.Component<{}, PageState> {
       console.error('Empty data received')
       return
     }
-    if (data.pointer) {
+    if (data.pointer !== undefined) {
       this.setState({
         multiSelectorIndices: {
           ...this.state.multiSelectorIndices,
@@ -591,7 +561,7 @@ class Page extends React.Component<{}, PageState> {
       })
       this.updateClients({ pointerMap: { [id]: data.pointer } })
     }
-    if (data.selected) {
+    if (data.selected !== undefined) {
       this.setState({
         multiSelectedIndices: {
           ...this.state.multiSelectedIndices,
@@ -600,14 +570,15 @@ class Page extends React.Component<{}, PageState> {
       })
       this.updateClients({ selectedMap: { [id]: data.selected } })
     }
-    if (data.boardupdate) {
-      this.mutateBoard((cells: Array<CellData>) => {
+    if (data.boardupdate !== undefined) {
+      this.mutateBoard((cells) => {
         for (let index in data.boardupdate) {
-          Object.assign(cells[parseInt(index)], data.boardupdate[index])
+          const [row, column] = index.split(',').map((i) => parseInt(i))
+          Object.assign(cells[row][column], data.boardupdate[index])
         }
       })
     }
-    if (data.color) {
+    if (data.color !== undefined) {
       this.setState({
         multiColors: {
           ...this.state.multiColors,
@@ -640,9 +611,18 @@ class Page extends React.Component<{}, PageState> {
     conn.on('open', () => {
       this.sendDataToClient(conn, {
         state: this.boardStates[this.state.boardStateIndex],
-        pointerMap: this.state.multiSelectorIndices,
-        selectedMap: this.state.multiSelectedIndices,
-        colorMap: this.state.multiColors,
+        pointerMap: {
+          ...this.state.multiSelectorIndices,
+          [this.state.onlineId]: this.state.selectorIndex,
+        },
+        selectedMap: {
+          ...this.state.multiSelectedIndices,
+          [this.state.onlineId]: this.state.selectedIndices,
+        },
+        colorMap: {
+          ...this.state.multiColors,
+          [this.state.onlineId]: this.state.myColor,
+        },
         ...(this.currentFile &&
           this.currentFileType && {
             image: { file: this.currentFile, filetype: this.currentFileType },
@@ -678,7 +658,7 @@ class Page extends React.Component<{}, PageState> {
           console.error('Empty data received')
           return
         }
-        if (data.pointerMap) {
+        if (data.pointerMap !== undefined) {
           this.setState((state) => ({
             multiSelectorIndices: {
               ...state.multiSelectorIndices,
@@ -686,7 +666,7 @@ class Page extends React.Component<{}, PageState> {
             },
           }))
         }
-        if (data.selectedMap) {
+        if (data.selectedMap !== undefined) {
           this.setState((state) => ({
             multiSelectedIndices: {
               ...state.multiSelectedIndices,
@@ -694,13 +674,13 @@ class Page extends React.Component<{}, PageState> {
             },
           }))
         }
-        if (data.state) {
+        if (data.state !== undefined) {
           this.boardStates.push(data.state)
           this.setState((state) => ({
             boardStateIndex: state.boardStateIndex + 1,
           }))
         }
-        if (data.image) {
+        if (data.image !== undefined) {
           const blob = new Blob([data.image.file], {
             type: data.image.filetype,
           })
@@ -836,7 +816,7 @@ class Page extends React.Component<{}, PageState> {
         <br />
         {this.state.hostId && 'Host is: ' + this.state.hostId}
         {clientIds.length !== 0 && 'Clients are: ' + clientIds.join(', ')}
-        <Divider horizontal>Notes</Divider>
+        {/* <Divider horizontal>Notes</Divider> */}
         <Accordion>
           {/* <DragDropContext onDragEnd={() => {}}>
     <Draggable>
@@ -882,11 +862,15 @@ class Page extends React.Component<{}, PageState> {
               e.stopPropagation()
             }}
           >
-            {/* <SudokuImafno */}
             <SudokuImageCanvas
               style={{ zIndex: 300 }}
               image={image}
               id="sudoku-annotations"
+            />
+            <SudokuImageCanvas
+              style={{ zIndex: 250 }}
+              image={image}
+              id="sudoku-extensions"
             />
             <SudokuImageCanvas
               style={{ zIndex: 200 }}
@@ -894,51 +878,60 @@ class Page extends React.Component<{}, PageState> {
               id="sudoku-image"
             />
             {this.boardStates[boardStateIndex] && (
-              <SudokuGrid style={{ padding: image.imageData ? '1px' : '2px' }}>
-                {(this.boardStates[boardStateIndex] as CellData[]).map(
-                  (cell, index) => {
-                    const selectorConnKey = Object.keys(
-                      multiSelectorIndices,
-                    ).find(
-                      (key) =>
-                        key !== onlineId && multiSelectorIndices[key] === index,
-                    )
-                    const selectedConnKey = Object.keys(
-                      multiSelectedIndices,
-                    ).find(
-                      (key) =>
-                        key !== onlineId &&
-                        multiSelectedIndices[key].includes(index),
-                    )
-
-                    return (
-                      <GridCell
-                        select={this.select}
-                        boxGap={image.imageData ? '1px' : '2px'}
-                        cellGap={image.imageData ? '0px' : '1px'}
-                        key={index}
-                        conflict={conflicts[index]}
-                        selectedColor={
-                          // Check if in the list
-                          selectedIndices.includes(index)
-                            ? myColor
-                            : selectedConnKey !== undefined
-                            ? multiColors[selectedConnKey]
-                            : null
-                        }
-                        selectorColor={
-                          selectorIndex === index
-                            ? myColor
-                            : selectorConnKey !== undefined
-                            ? multiColors[selectorConnKey]
-                            : null
-                        }
-                        data={cell}
-                        index={index}
-                        imageLoaded={!!image.imageData}
-                      />
-                    )
-                  },
+              <SudokuGrid
+                style={{
+                  padding: image.imageData ? '1px' : '2px',
+                }}
+              >
+                {this.boardStates[boardStateIndex].reduce<ReactNode[]>(
+                  (out, rowData, row) => [
+                    ...out,
+                    ...rowData.map((cell, column) => {
+                      const index = row + ',' + column
+                      const selectorConnKey = Object.keys(
+                        multiSelectorIndices,
+                      ).find(
+                        (key) =>
+                          key !== onlineId &&
+                          multiSelectorIndices[key] === index,
+                      )
+                      const selectedConnKey = Object.keys(
+                        multiSelectedIndices,
+                      ).find(
+                        (key) =>
+                          key !== onlineId &&
+                          multiSelectedIndices[key].includes(index),
+                      )
+                      return (
+                        <GridCell
+                          select={this.select}
+                          boxGap={image.imageData ? '1px' : '2px'}
+                          cellGap={image.imageData ? '0px' : '1px'}
+                          key={index}
+                          conflict={conflicts[index]}
+                          selectedColor={
+                            // Check if in the list
+                            selectedIndices.includes(index)
+                              ? myColor
+                              : selectedConnKey !== undefined
+                              ? multiColors[selectedConnKey]
+                              : null
+                          }
+                          selectorColor={
+                            selectorIndex === index
+                              ? myColor
+                              : selectorConnKey !== undefined
+                              ? multiColors[selectorConnKey]
+                              : null
+                          }
+                          data={cell}
+                          index={index}
+                          imageLoaded={!!image.imageData}
+                        />
+                      )
+                    }),
+                  ],
+                  [],
                 )}
               </SudokuGrid>
             )}

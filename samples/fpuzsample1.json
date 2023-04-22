@@ -1,0 +1,204 @@
+{
+  "size": 9,
+  "title": "REM Tagesmörder",
+  "author": "Ryx",
+  "ruleset": "Es gelten die normalen Sudoku-Regeln\n\nREM Einschränkung - das fertige Puzzle muss eine Drei (3) in mindestens einer der äußeren Ecken (graue Zellen) enthalten\n\nAnti-Springer - Ziffern, die sich von einem Springer wegbewegen, dürfen nicht gleich sein\n\nKiller-Käfig - Zahlen wiederholen sich nicht in Käfigen und summieren sich zur vorgegebenen Käfigsumme\n",
+  "grid": [
+    [
+      {
+        "c": "#A8A8A8"
+      },
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {
+        "c": "#A8A8A8"
+      }
+    ],
+    [
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {}
+    ],
+    [
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {}
+    ],
+    [
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {}
+    ],
+    [
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {}
+    ],
+    [
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {}
+    ],
+    [
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {}
+    ],
+    [
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {}
+    ],
+    [
+      {
+        "c": "#A8A8A8"
+      },
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {},
+      {
+        "c": "#A8A8A8"
+      }
+    ]
+  ],
+  "antiknight": true,
+  "killercage": [
+    {
+      "cells": [
+        "R2C3",
+        "R3C3"
+      ],
+      "value": "5"
+    },
+    {
+      "cells": [
+        "R2C7",
+        "R3C7"
+      ],
+      "value": "6"
+    },
+    {
+      "cells": [
+        "R1C5",
+        "R2C5",
+        "R3C5",
+        "R4C5"
+      ],
+      "value": "12"
+    },
+    {
+      "cells": [
+        "R2C9",
+        "R3C9"
+      ],
+      "value": "9"
+    },
+    {
+      "cells": [
+        "R2C1",
+        "R3C1"
+      ],
+      "value": "9"
+    },
+    {
+      "cells": [
+        "R7C5",
+        "R8C5"
+      ],
+      "value": "9"
+    },
+    {
+      "cells": [
+        "R7C7",
+        "R8C7"
+      ],
+      "value": "12"
+    },
+    {
+      "cells": [
+        "R7C3",
+        "R8C3"
+      ],
+      "value": "13"
+    },
+    {
+      "cells": [
+        "R5C2",
+        "R5C3"
+      ],
+      "value": "16"
+    },
+    {
+      "cells": [
+        "R5C7",
+        "R5C8"
+      ],
+      "value": "4"
+    },
+    {
+      "cells": [
+        "R8C2",
+        "R9C2"
+      ],
+      "value": "5"
+    },
+    {
+      "cells": [
+        "R8C8",
+        "R9C8"
+      ],
+      "value": "8"
+    }
+  ]
+}

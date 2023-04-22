@@ -1,0 +1,1 @@
+whole board antiknight only has to check 4/8 combinations, since half of them are mirrored. Prefer down / to the right

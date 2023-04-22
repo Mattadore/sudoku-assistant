@@ -11,7 +11,7 @@ const GridCellBackground = styled.div`
   position: relative;
   width: 100%;
   height: 100%;
-  z-index: 200;
+  z-index: 210;
 `
 
 const GridCellHighlightedAcross = styled.div`
@@ -74,13 +74,13 @@ const HintNumberTop = styled.div`
 `
 
 interface GridCellProps {
-  index: number
+  index: string
   imageLoaded: boolean
   data: CellData
   selectorColor: string | null
   selectedColor: string | null
   select: (
-    index: number,
+    index: string,
     event: KeyboardEvent | React.MouseEvent<HTMLDivElement, MouseEvent>,
     multi?: boolean,
   ) => void
@@ -101,8 +101,7 @@ export const GridCell: React.FC<GridCellProps> = React.memo(
     boxGap = '1.5px',
     conflict,
   }) => {
-    const column = index % 9
-    const row = Math.floor(index / 9)
+    const [row, column] = index.split(',').map((i) => parseInt(i))
     return (
       <GridCellStyle
         onMouseDown={(e) => {
