@@ -32,6 +32,20 @@ export default class Thermometer implements SolverExtension {
     return conflicts
   }
 
+  getCellConflict = (board: BoardState, row: number, column: number) => {
+    let cellValue = board[row][column].number
+    const index = row + ',' + column
+    if (!cellValue || !(index in this.prevCellMap)) return false
+    for (let prevCell of this.prevCellMap[index]) {
+      const [prevRow, prevColumn] = splitIndex(prevCell)
+      let prevValue = board[prevRow][prevColumn].number
+      if (prevValue !== null && prevValue >= cellValue) {
+        return true
+      }
+    }
+    return false
+  }
+
   updateMetadata = () => {
     this.prevCellMap = {}
     for (let thermo of this.data) {
@@ -49,19 +63,6 @@ export default class Thermometer implements SolverExtension {
         lastIndex = index
       }
     }
-  }
-
-  getCellConflict = (board: BoardState, row: number, column: number) => {
-    let cellValue = board[row][column].number
-    if (!cellValue) return false
-    for (let prevCell of this.prevCellMap[row + ',' + column]) {
-      const [prevRow, prevColumn] = splitIndex(prevCell)
-      let prevValue = board[prevRow][prevColumn].number
-      if (prevValue !== null && prevValue >= cellValue) {
-        return true
-      }
-    }
-    return false
   }
 
   loadFpuzzleData = (loadedData: FpuzzleThermoData) => {
