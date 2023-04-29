@@ -93,7 +93,8 @@ export const preprocessImage = (imageData: ImageData) => {
       columns[x] = ++columns[x]
       rows[y] = ++rows[y]
     }
-    if (lightness > 50 && (lightness > 95 || chromaValue > 10)) {
+    // if (lightness > 50 && (lightness > 95 || chromaValue > 10)) {
+    if (lightness > 95) {
       annotationData[index * 4 + 3] = 0
     }
   }
