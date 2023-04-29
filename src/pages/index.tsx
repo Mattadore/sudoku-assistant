@@ -26,16 +26,18 @@ interface IndexPageProps {
   }
 }
 
+type SudokuImageData = {
+  leftEdge: number
+  rightEdge: number
+  topEdge: number
+  bottomEdge: number
+  imageData: ImageData | null
+}
+
 const isBrowser = typeof window !== 'undefined'
 
 const SudokuImageCanvas = styled.canvas<{
-  image: {
-    leftEdge: number
-    rightEdge: number
-    topEdge: number
-    bottomEdge: number
-    imageData: ImageData | null
-  }
+  image: SudokuImageData
 }>`
   position: absolute;
   width: 100%;
@@ -698,10 +700,30 @@ class Page extends React.Component<{}, PageState> {
     }
   }
 
+  ImageCanvases = React.memo(({ image }: { image: SudokuImageData }) => (
+    <>
+      <SudokuImageCanvas
+        style={{ zIndex: 300 }}
+        image={image}
+        id="sudoku-annotations"
+      />
+      <SudokuImageCanvas
+        style={{ zIndex: 250 }}
+        image={image}
+        id="sudoku-extensions"
+      />
+      <SudokuImageCanvas
+        style={{ zIndex: 200 }}
+        image={image}
+        id="sudoku-image"
+      />
+    </>
+  ))
+
   Sidebar = React.memo(
     ({
       pickingMe,
-      myData,
+      myColor,
       selectedColor,
       onlineId,
       hostIdText,
@@ -709,7 +731,7 @@ class Page extends React.Component<{}, PageState> {
       host,
     }: {
       pickingMe: boolean
-      myData: Userdata
+      myColor: string
       selectedColor: string
       onlineId: string
       hostIdText: string
@@ -720,7 +742,7 @@ class Page extends React.Component<{}, PageState> {
         <Divider horizontal>Color</Divider>
         <CompactPicker
           colors={colorPickerColors}
-          color={pickingMe ? myData.color : selectedColor}
+          color={pickingMe ? myColor : selectedColor}
           onChangeComplete={(color) => {
             // setColor(color.hex)
             if (pickingMe) {
@@ -739,7 +761,7 @@ class Page extends React.Component<{}, PageState> {
           onClick={(event) => {
             this.setState((state) => ({ pickingMe: !state.pickingMe }))
           }}
-          style={{ backgroundColor: myData.color }}
+          style={{ backgroundColor: myColor }}
         >
           {pickingMe ? 'Picking my color...' : 'Pick my color'}{' '}
         </Button>
@@ -815,21 +837,7 @@ class Page extends React.Component<{}, PageState> {
               e.stopPropagation()
             }}
           >
-            <SudokuImageCanvas
-              style={{ zIndex: 300 }}
-              image={image}
-              id="sudoku-annotations"
-            />
-            <SudokuImageCanvas
-              style={{ zIndex: 250 }}
-              image={image}
-              id="sudoku-extensions"
-            />
-            <SudokuImageCanvas
-              style={{ zIndex: 200 }}
-              image={image}
-              id="sudoku-image"
-            />
+            <this.ImageCanvases image={image} />
             {this.boardStates[boardStateIndex] && (
               <SudokuGrid
                 style={{
@@ -892,7 +900,7 @@ class Page extends React.Component<{}, PageState> {
         </GridContainer>
         <this.Sidebar
           pickingMe={pickingMe}
-          myData={myUserdata}
+          myColor={myUserdata.color}
           selectedColor={selectedColor}
           onlineId={onlineId}
           hostIdText={hostIdText}
