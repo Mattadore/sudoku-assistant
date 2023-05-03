@@ -1,57 +1,77 @@
+import { addConflicts, removeConflicts } from 'helper'
+import { Extensions } from 'solver-extensions'
+
 export class SolverExtensionManager {
   extensions: { [key: string]: SolverExtension } = {}
+  conflictMatrix: ConflictMatrix = []
+  // extensionConflictMatrices: { [key: string]: ConflictMatrix } = {}
+  // [row][col][number] conflicts or not
+
   settings = {
-    disableDefaultValidation: false
+    disableDefaultValidation: false,
   }
 
-  // check validity of a given board
-  getBoardConflicts = (board: BoardState) => {
-    const conflicts: ConflictList = {}
-    for (const extensionName in this.extensions) {
-      let extConflicts : ConflictList
-      if (typeof this.extensions[extensionName].getBoardConflicts === 'function') {
-        extConflicts = this.extensions[extensionName].getBoardConflicts!(board)
-      }
-      else {
-        // just call "validateCells", much slower
-        let cells = []
-        for (let row = 0; row < board.length; ++row) {
-          for (let column = 0; column < board[row].length; ++column) {
-            cells.push(row+","+column)
-          }
-        }
-        extConflicts = this.getCellConflicts(board, cells)
-      }
-      for (const conflict in extConflicts) {
-        conflicts[conflict] = true
-      }
-    }
-    return conflicts
-  }
-
-  // check validity of a given set of cells
-  getCellConflicts = (board: BoardState, indices: string[]) => {
-    const conflicts: ConflictList = {}
-    for (const index in indices) {
+  // update conflict matrix for a given set of cells
+  updateCellConflicts = (board: BoardState, indices: string[]) => {
+    // what cells need to be recalculated
+    for (const index of indices) {
       const [row, column] = index.split(',').map((i) => parseInt(i))
+      const boardIndex: BoardIndex = [row, column]
       for (const extensionName in this.extensions) {
-        if (this.extensions[extensionName].getCellConflict(board, row, column)) {
-          conflicts[index] = true
+        if (!this.extensions[extensionName].isRelevant(boardIndex)) continue
+        const conflictList = this.extensions[extensionName].getCellConflicts(
+          board,
+          boardIndex,
+        )
+        removeConflicts(this.conflictMatrix, boardIndex, extensionName)
+        addConflicts(
+          this.conflictMatrix,
+          boardIndex,
+          conflictList,
+          extensionName,
+        )
+      }
+    }
+  }
+
+  initialize = (board: BoardState, extensions: (keyof typeof Extensions)[]) => {
+    // Create the conflict matrix
+    const rows = board.length
+    const cols = board[0].length
+    for (let row = 0; row < rows; ++row) {
+      this.conflictMatrix.push([])
+      for (let col = 0; col < cols; ++col) {
+        this.conflictMatrix[row].push({
+          dependencies: extensions.reduce(
+            (acc, extension) => ({
+              ...acc,
+              [extension]: {},
+            }),
+            {},
+          ),
+          conflicts: [],
+        })
+        for (let n = 1; n <= 9; ++n) {
+          this.conflictMatrix[row][col].conflicts.push([])
         }
       }
     }
-    return conflicts
+    for (const extension of extensions) {
+      this.loadExtension(new Extensions[extension](), board)
+    }
+    // this.loadExtension()
   }
 
-  // load an extension configuration
-  // loadConfig = (config: SolverExtensionConfig) => {
+  getConflictMatrix = () => {
+    return this.conflictMatrix
+  }
 
-  // }
-
-  loadExtension = (extension: SolverExtension) => {
-    if ("settings" in extension) {
-      this.settings = {...this.settings, ...extension.settings}
+  loadExtension = (extension: SolverExtension, board: BoardState) => {
+    if ('settings' in extension) {
+      this.settings = { ...this.settings, ...extension.settings }
     }
     this.extensions[extension.extensionName] = extension
+    // this.extensionConflictMatrices[extension.extensionName] =
+    //   createConflictMatrix(board)
   }
 }

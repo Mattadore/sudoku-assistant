@@ -1,10 +1,10 @@
 import * as React from 'react'
 import chroma from 'chroma-js'
-import produce from 'immer'
+import { produce } from 'immer'
 import { SolverExtensionManager } from 'solver-extensions'
 
 // get a differential tree btwn two states
-export const getDiff = (
+export const getBoardDiff = (
   starting: CellData[][],
   updated: CellData[][],
 ): { [key: string]: CellDiff } => {
@@ -14,14 +14,7 @@ export const getDiff = (
     for (const column in updated[row]) {
       if (starting[row][column] !== updated[row][column]) {
         const diffkey = row + ',' + column
-        diff[diffkey] = {}
-        let prop: keyof CellData
-        for (prop in updated[row][column]) {
-          if (updated[row][column][prop] !== starting[row][column][prop]) {
-            // ts does not know how to handle this
-            ;(diff[diffkey][prop] as any) = updated[row][column][prop] as any
-          }
-        }
+        diff[diffkey] = getDiff(starting[row][column], updated[row][column])
         if (Object.keys(diff[diffkey]).length === 0) {
           delete diff[diffkey]
         }
@@ -32,33 +25,79 @@ export const getDiff = (
   return diff
 }
 
-export const getUserDiff = (
-  starting: Userdata,
-  updated: Userdata,
-): Diff<Userdata> => {
-  const diff: { [key: string]: CellDiff } = {}
-  for (const row in updated) {
-    if (starting[row] === updated[row]) continue
-    for (const column in updated[row]) {
-      if (starting[row][column] !== updated[row][column]) {
-        const diffkey = row + ',' + column
-        diff[diffkey] = {}
-        let prop: keyof CellData
-        for (prop in updated[row][column]) {
-          if (updated[row][column][prop] !== starting[row][column][prop]) {
-            // ts does not know how to handle this
-            ;(diff[diffkey][prop] as any) = updated[row][column][prop] as any
-          }
-        }
-        if (Object.keys(diff[diffkey]).length === 0) {
-          delete diff[diffkey]
-        }
+export const getDiff = <T extends Object>(before: T, after: T) => {
+  const diff: Diff<T> = {}
+  for (let prop in before) {
+    if (before[prop] !== after[prop]) {
+      const value = after[prop]
+      if (
+        typeof before[prop] != typeof after[prop] ||
+        typeof value == 'boolean' ||
+        typeof value == 'number' ||
+        typeof value == 'string' ||
+        value == null ||
+        value instanceof Array
+      ) {
+        diff[prop] = after[prop]
+      } else {
+        diff[prop] = getDiff(before[prop] as Object, after[prop] as Object)
       }
     }
   }
-
   return diff
 }
+
+export const getDeepDiff = <T extends Object>(before: T, after: T) => {
+  const diff: Diff<T> = {}
+  for (let prop in before) {
+    // if (before[prop] !== after[prop]) {
+    const value = after[prop]
+    if (
+      typeof before[prop] != typeof after[prop] ||
+      typeof value == 'boolean' ||
+      typeof value == 'number' ||
+      typeof value == 'string' ||
+      value == null ||
+      value instanceof Array
+    ) {
+      if (JSON.stringify(before[prop]) !== JSON.stringify(after[prop])) {
+        diff[prop] = value
+      }
+    } else {
+      diff[prop] = getDiff(before[prop] as Object, after[prop] as Object)
+    }
+    // }
+  }
+  return diff
+}
+
+// export const getUserDiff = (
+//   starting: Userdata,
+//   updated: Userdata,
+// ): Diff<Userdata> => {
+//   const diff: { [key: string]: CellDiff } = {}
+//   for (const row in updated) {
+//     if (starting[row] === updated[row]) continue
+//     for (const column in updated[row]) {
+//       if (starting[row][column] !== updated[row][column]) {
+//         const diffkey = row + ',' + column
+//         diff[diffkey] = {}
+//         let prop: keyof CellData
+//         for (prop in updated[row][column]) {
+//           if (updated[row][column][prop] !== starting[row][column][prop]) {
+//             // ts does not know how to handle this
+//             ;(diff[diffkey][prop] as any) = updated[row][column][prop] as any
+//           }
+//         }
+//         if (Object.keys(diff[diffkey]).length === 0) {
+//           delete diff[diffkey]
+//         }
+//       }
+//     }
+//   }
+
+//   return diff
+// }
 
 export const adjacentIndices = (
   index: number,
@@ -200,9 +239,69 @@ export const splitIndex = (index: string) => {
   return index.split(',').map((i) => parseInt(i))
 }
 
-const recursiveMerge = <T,>(obj: T, diff: Diff<T>) => {
+export const stringIndex = (row: number, col: number) => {
+  return row + ',' + col
+}
+
+export const stringIndexFromBoardIndex = (index: BoardIndex) => {
+  return index[0] + ',' + index[1]
+}
+
+export const removeConflicts = (
+  matrix: ConflictMatrix,
+  cell: BoardIndex,
+  extension: string,
+) => {
+  const cellConflictData: ConflictData = matrix[cell[0]][cell[1]]
+  // for each cell that depends on this cell's number
+  for (const [dependency, numbers] of Object.entries(
+    cellConflictData.dependencies[extension],
+  )) {
+    const [row, col] = splitIndex(dependency)
+    // for each number in that cell that depends on this cell
+    for (const number of numbers) {
+      const conflicts = matrix[row][col].conflicts
+      // remove the dependency from this cell to that number in the other cell
+      conflicts[number - 1] = conflicts[number - 1].filter((index) => {
+        return (
+          index[0] != cell[0] || index[1] != cell[1] || index[2] != extension
+        )
+      })
+    }
+  }
+  // reset this cell's dependency map
+  cellConflictData.dependencies[extension] = {}
+}
+
+export const addConflicts = (
+  matrix: ConflictMatrix,
+  cell: BoardIndex,
+  conflicts: number[][],
+  extension: string,
+) => {
+  const thisCellConflict = matrix[cell[0]][cell[1]]
+  for (const conflict of conflicts) {
+    const row = conflict[0]
+    const col = conflict[1]
+    // for each number conflict
+    for (let i = 2; i < conflict.length; ++i) {
+      const cons = matrix[row][col].conflicts
+      cons[conflict[i] - 1].push([cell[0], cell[1], extension])
+      const index = stringIndex(row, col)
+      if (!(index in thisCellConflict.dependencies[extension])) {
+        thisCellConflict.dependencies[extension][index] = []
+      }
+      thisCellConflict.dependencies[extension][index].push(conflict[i])
+    }
+  }
+}
+
+export const inplaceMerge = <T extends Object>(obj: T, diff: Diff<T>) => {
+  if (obj === undefined || obj === null) return
   for (let [key, value] of Object.entries(diff)) {
-    if (
+    if (!(key in obj)) {
+      ;(obj as any)[key] = value
+    } else if (
       typeof value == 'boolean' ||
       typeof value == 'number' ||
       typeof value == 'string' ||
@@ -212,14 +311,14 @@ const recursiveMerge = <T,>(obj: T, diff: Diff<T>) => {
     } else if (value instanceof Array) {
       obj[key as keyof T] = value as any
     } else {
-      recursiveMerge((obj as any)[key], value as any)
+      inplaceMerge((obj as any)[key], value as any)
     }
   }
 }
 
-export const merge = <T,>(obj: T, diff: Diff<T>) => {
+export const createMerge = <T extends Object>(obj: T, diff: Diff<T>) => {
   return produce(obj, (draft) => {
-    recursiveMerge(draft as T, diff)
+    inplaceMerge(draft as T, diff)
   })
 }
 
@@ -291,9 +390,9 @@ export const validate = (
     }
   }
   //TODO: make this granular and move above logic into extension
-  const extensionConflicts = extensionManager.getBoardConflicts(board)
-  for (const conflict in extensionConflicts) {
-    conflicts[conflict] = true
-  }
+  // const extensionConflicts = extensionManager.getBoardConflicts(board)
+  // for (const conflict in extensionConflicts) {
+  //   conflicts[conflict] = true
+  // }
   return conflicts
 }

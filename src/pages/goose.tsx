@@ -8,7 +8,6 @@ interface PageState {}
 // }
 
 const GoosePage: React.FC<PageState> = (props) => {
-  console.log('i am gose')
   return (
     <div>
       <div>

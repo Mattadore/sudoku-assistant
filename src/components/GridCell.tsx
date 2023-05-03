@@ -36,9 +36,10 @@ const GridSelectedCircle = styled.div`
 `
 
 const CentralNumberContainer = styled.div`
-  /* font-weight: bold; */
   z-index: 5000;
   font-size: 3rem;
+  color: #00ccff;
+  font-weight: bold;
   width: 100%;
   height: 100%;
   align-items: center;
@@ -64,12 +65,21 @@ const GridCellHighlightedUp = styled.div`
   background-color: #ddaa00;
 `
 
-const HintNumberTop = styled.div`
+const HintNumberTopLeft = styled.div`
   position: absolute;
   z-index: 2000;
+  color: #00ccff;
   top: 3px;
   left: 3px;
-  font-size: 12px;
+  font-weight: bold;
+`
+
+const HintNumberBottomRight = styled.div`
+  position: absolute;
+  z-index: 2000;
+  color: #00ccff;
+  bottom: 3px;
+  right: 3px;
   font-weight: bold;
 `
 
@@ -86,10 +96,11 @@ interface GridCellProps {
   ) => void
   cellGap?: string
   boxGap?: string
-  conflict: boolean
+  conflict: ConflictData
 }
 
-export const GridCell: React.FC<GridCellProps> = React.memo(
+export const GridCell: React.FC<GridCellProps> =
+  /*React.memo*/
   ({
     index,
     imageLoaded,
@@ -105,12 +116,11 @@ export const GridCell: React.FC<GridCellProps> = React.memo(
     return (
       <GridCellStyle
         onMouseDown={(e) => {
-          // e.preventDefault()
+          e.preventDefault()
           // e.stopPropagation()
           select(index, e)
         }}
         onMouseEnter={(e) => {
-          // console.log()
           if (e.buttons === 1) {
             e.preventDefault()
             e.stopPropagation()
@@ -138,17 +148,15 @@ export const GridCell: React.FC<GridCellProps> = React.memo(
           <CentralNumberContainer
             style={
               !data.number
-                ? {
-                    fontSize: 12,
-                    fontWeight: 'bold',
-                  }
-                : conflict !== undefined && conflict
-                ? { color: '#AC3235', fontWeight: 'bold' }
+                ? { fontSize: 16 }
+                : conflict.conflicts[data.number - 1].length > 0
+                ? { color: '#AC3235' }
                 : {}
             }
             className="noselect"
           >
-            {data.number ? data.number : data.center.join('')}
+            {data.number ? data.number : data.center.numbers.join('')}
+            {!data.number && data.center.letters.join('')}
           </CentralNumberContainer>
           {selectorColor && (
             <>
@@ -179,12 +187,21 @@ export const GridCell: React.FC<GridCellProps> = React.memo(
           )}
 
           {!data.number && (
-            <HintNumberTop className="noselect">
-              {data.corner.join('')}
-            </HintNumberTop>
+            <>
+              <HintNumberTopLeft className="noselect" style={{ fontSize: 16 }}>
+                {data.topLeftCorner.numbers.join('')}
+                {data.topLeftCorner.letters.join('')}
+              </HintNumberTopLeft>
+              <HintNumberBottomRight
+                className="noselect"
+                style={{ fontSize: 16 }}
+              >
+                {data.bottomRightCorner.numbers.join('')}
+                {data.bottomRightCorner.letters.join('')}
+              </HintNumberBottomRight>
+            </>
           )}
         </NumbersContainer>
       </GridCellStyle>
     )
-  },
-)
+  }
