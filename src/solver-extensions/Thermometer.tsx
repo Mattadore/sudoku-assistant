@@ -1,14 +1,10 @@
-// [thermo#][segment#][1: row, 2: col]
 type ThermoIndex = BoardIndex
+// [thermo#][segment#]x[1: row, 2: col]
 type ThermoData = BoardIndex[][]
 
 type FpuzzleThermoData = {
   lines: string[][]
 }[]
-
-// type ThermoIndexMap = {
-//   [key: string]: string[]
-// }
 
 import { splitIndex } from 'helper'
 
@@ -21,24 +17,6 @@ export default class Thermometer implements SolverExtension {
   isRelevant = (index: BoardIndex) => {
     return this.cellToThermoIndex.get(index) !== undefined
   }
-
-  getCellConflicts = (board: BoardState, row: number, column: number) => {
-    let cellValue = board[row][column].number
-    const index = row + ',' + column
-    if (!cellValue || !(index in this.prevCellMap)) return false
-    for (let prevCell of this.prevCellMap[index]) {
-      const [prevRow, prevColumn] = splitIndex(prevCell)
-      let prevValue = board[prevRow][prevColumn].number
-      if (prevValue !== null && prevValue >= cellValue) {
-        return true
-      }
-    }
-    return false
-  }
-
-  // generateConflicts(): any => {
-
-  // }
 
   updateMetadata = () => {
     this.prevCellMap = {}

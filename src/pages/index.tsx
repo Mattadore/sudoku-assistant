@@ -6,7 +6,15 @@ import { CompactPicker } from 'react-color'
 import styled from '@emotion/styled'
 import { produce } from 'immer'
 // import { Divider, Button } from 'semantic-ui-react'
-import { Accordion, TextareaAutosize, Divider, Button } from '@mui/material'
+import {
+  Accordion,
+  TextareaAutosize,
+  Divider,
+  Button,
+  Drawer,
+  Container,
+  Box,
+} from '@mui/material'
 import {
   getBoardDiff,
   getDiff,
@@ -15,6 +23,8 @@ import {
   validate,
   inplaceMerge,
   createMerge,
+  stringIndex,
+  splitIndex,
 } from 'helper'
 import { GridCell } from 'components'
 import type { Peer, DataConnection } from 'peerjs'
@@ -77,12 +87,12 @@ const SudokuImageCanvas = styled.canvas<{
       : '100%'};
 `
 
-const PageContainer = styled.div`
-  display: flex;
-  width: 100%;
-  height: 100vh;
-  flex-direction: row;
-`
+// const PageContainer = styled.div`
+//   display: flex;
+//   width: 100%;
+//   height: 100vh;
+//   flex-direction: row;
+// `
 
 const SidebarContainer = styled.div`
   flex: 1;
@@ -167,12 +177,12 @@ type HostToClientData = {
   }
 }
 
-type ClientToHostCommand = 'undo' | 'redo'
+// type ClientToHostCommand = 'undo' | 'redo'
 
 type ClientToHostData = {
   userdataDiff?: Diff<Userdata>
   boardupdate?: { [key: string]: CellDiff }
-  command?: ClientToHostCommand
+  traverseHistory?: number
 }
 
 interface PageState {
@@ -251,49 +261,7 @@ class Page extends React.Component<{}, PageState> {
     }
     this.extensionManager.initialize(this.boardStates[0], ['Sudoku'])
     this.conflicts = this.extensionManager.getConflictMatrix()
-  }
-
-  updateUserdata = (update: Diff<Userdata>) => {
-    // this.setState((state) => ({
-    //   myUserdata: produce(state.myUserdata, update),
-    // }))
-    this.setState((state) => ({
-      myUserdata: createMerge(state.myUserdata, update),
-    }))
-    const { host, clients } = this.state
-    if (host !== null) {
-      this.updateHost({ userdataDiff: update })
-    } else {
-      this.updateClients({ userdataMap: { [this.state.onlineId]: update } })
-    }
-  }
-
-  mutateBoard = (update: (method: BoardState) => void): void => {
-    const { boardStateIndex, clients } = this.state
-    //useCallback(
-    const out = produce(
-      this.boardStates[boardStateIndex],
-      (cellsDraft: BoardState) => {
-        update(cellsDraft)
-      },
-    )
-
-    this.boardStates.splice(boardStateIndex + 1, this.boardStates.length)
-    this.boardStates.push(out)
-    const diff = getBoardDiff(this.boardStates[boardStateIndex], out)
-    const changed: string[] = []
-    for (let key in diff) {
-      changed.push(key)
-    }
-    this.extensionManager.updateCellConflicts(out, changed)
-    if (this.state.hostId !== null) {
-      console.log('DIFF:', diff)
-      this.updateHost({ boardupdate: diff })
-    } else {
-      this.updateClients({ state: out })
-    }
-
-    this.setState((state) => ({ boardStateIndex: state.boardStateIndex + 1 }))
+    // window.onbeforeunload = () => 'Are you sure you want to abandon the doku?'
   }
 
   // useful to give host init better typing
@@ -330,6 +298,15 @@ class Page extends React.Component<{}, PageState> {
     event: KeyboardEvent | React.MouseEvent<HTMLDivElement, MouseEvent>,
     multi = false,
   ) => {
+    if (event.detail === 2) {
+      const [row, col] = splitIndex(index)
+      const number =
+        this.boardStates[this.state.boardStateIndex][row][col].number
+      if (number) {
+        this.selectCellsIf((cell) => cell.number === number)
+      }
+      return
+    }
     const { myUserdata, image } = this.state
     // if (!event.altKey) {
     this.updateUserdata({ selectorIndex: index })
@@ -397,6 +374,85 @@ class Page extends React.Component<{}, PageState> {
   //   }
   // }
 
+  updateUserdata = (update: Diff<Userdata>) => {
+    // this.setState((state) => ({
+    //   myUserdata: produce(state.myUserdata, update),
+    // }))
+    this.setState((state) => ({
+      myUserdata: createMerge(state.myUserdata, update),
+    }))
+    const { host } = this.state
+    if (host !== null) {
+      this.updateHost({ userdataDiff: update })
+    } else {
+      this.updateClients({ userdataMap: { [this.state.onlineId]: update } })
+    }
+  }
+
+  updateConflicts = (
+    indexBefore: number,
+    indexAfter: number,
+    diff: ReturnType<typeof getBoardDiff> | null = null,
+  ): void => {
+    const stateBefore = this.boardStates[indexBefore]
+    const stateAfter = this.boardStates[indexAfter]
+    if (diff === null) {
+      diff = getBoardDiff(stateBefore, stateAfter)
+    }
+    const changed: string[] = []
+    for (let key in diff) {
+      const [row, col] = splitIndex(key)
+      if (stateBefore[row][col].number !== stateAfter[row][col].number) {
+        changed.push(key)
+      }
+    }
+    this.extensionManager.updateCellConflicts(
+      this.boardStates[indexAfter],
+      changed,
+    )
+  }
+
+  mutateBoard = (update: (method: BoardState) => void): void => {
+    const { boardStateIndex } = this.state
+    //useCallback(
+    const out = produce(
+      this.boardStates[boardStateIndex],
+      (cellsDraft: BoardState) => {
+        update(cellsDraft)
+      },
+    )
+    const diff = getBoardDiff(this.boardStates[boardStateIndex], out)
+    this.boardStates.splice(boardStateIndex + 1, this.boardStates.length)
+    this.boardStates.push(out)
+    this.updateConflicts(boardStateIndex, boardStateIndex + 1)
+    if (this.state.hostId !== null) {
+      console.log('DIFF:', diff)
+      this.updateHost({ boardupdate: diff })
+    } else {
+      this.updateClients({ state: out })
+    }
+
+    this.setState((state) => ({ boardStateIndex: state.boardStateIndex + 1 }))
+  }
+
+  traverseBoardHistory = (amount: number): void => {
+    const { boardStateIndex, hostId } = this.state
+    if (!hostId) {
+      const newIndex = boardStateIndex + amount
+      if (newIndex > 0 && newIndex < this.boardStates.length - 1) {
+        this.updateConflicts(boardStateIndex, boardStateIndex + amount)
+        this.setState({
+          boardStateIndex: boardStateIndex + amount,
+        })
+        this.updateClients({
+          state: this.boardStates[boardStateIndex + amount],
+        })
+      }
+    } else {
+      this.updateHost({ traverseHistory: amount })
+    }
+  }
+
   // Applies a transformation to all selected cells
   mutateSelectedCells = (update: (cell: CellData) => void): void => {
     const { selectedIndices } = this.state.myUserdata
@@ -408,7 +464,7 @@ class Page extends React.Component<{}, PageState> {
     })
   }
 
-  allSelectedCells = (test: (cell: CellData) => boolean): boolean => {
+  doAllSelectedCells = (test: (cell: CellData) => boolean): boolean => {
     const { selectedIndices } = this.state.myUserdata
     const boardState = this.boardStates[this.state.boardStateIndex]
     for (const selected of selectedIndices) {
@@ -420,12 +476,25 @@ class Page extends React.Component<{}, PageState> {
     return true
   }
 
+  selectCellsIf = (test: (cell: CellData) => boolean): void => {
+    const selectedIndices: string[] = []
+    const boardState = this.boardStates[this.state.boardStateIndex]
+    for (let row = 0; row < boardState.length; ++row) {
+      for (let col = 0; col < boardState[row].length; ++col) {
+        if (test(boardState[row][col])) {
+          selectedIndices.push(stringIndex(row, col))
+        }
+      }
+    }
+    this.updateUserdata({ selectedIndices })
+  }
+
   toggleAnnotation(annotation: string | number, location: AnnotationLocation) {
     const isNumber = typeof annotation == 'number'
     const container = isNumber ? 'numbers' : 'letters'
     if (location == 'number' && typeof annotation == 'string') return
     // If the annotation isn't in all boxes, we're toggling on; else, toggle off.
-    const enable = !this.allSelectedCells((cell) => {
+    const enable = !this.doAllSelectedCells((cell) => {
       if (location == 'number') {
         return cell.number == annotation
       }
@@ -453,7 +522,7 @@ class Page extends React.Component<{}, PageState> {
   }
 
   keyCallback = (event: KeyboardEvent) => {
-    const { myUserdata, boardStateIndex } = this.state
+    const { myUserdata } = this.state
     if (myUserdata.selectorIndex === null) {
       return
     }
@@ -491,43 +560,21 @@ class Page extends React.Component<{}, PageState> {
       .map((i) => parseInt(i))
     switch (event.key) {
       case 'y':
-        if (
-          !this.state.hostId &&
-          event.ctrlKey &&
-          boardStateIndex < this.boardStates.length - 1
-        ) {
+        if (event.ctrlKey) {
           event.preventDefault()
-          this.setState({
-            boardStateIndex: boardStateIndex + 1,
-          })
-          this.updateClients({ state: this.boardStates[boardStateIndex + 1] })
-        } else if (this.state.hostId && event.ctrlKey) {
-          this.updateHost({ command: 'redo' })
+          this.traverseBoardHistory(1)
         }
         break
       case 'z':
-        if (!this.state.hostId && event.ctrlKey && boardStateIndex > 0) {
+        if (event.ctrlKey) {
           event.preventDefault()
-          this.setState((state) => ({
-            boardStateIndex: state.boardStateIndex - 1,
-          }))
-          this.updateClients({ state: this.boardStates[boardStateIndex - 1] })
-        } else if (this.state.hostId && event.ctrlKey) {
-          this.updateHost({ command: 'undo' })
+          this.traverseBoardHistory(-1)
         }
         break
       case 'a':
         if (event.ctrlKey) {
           event.preventDefault()
-          const allIndices = Array(this.numRows * this.numColumns)
-            .fill(0)
-            .map(
-              (v, index) =>
-                (index % this.numRows) +
-                ',' +
-                Math.floor(index / this.numColumns),
-            )
-          this.updateUserdata({ selectedIndices: allIndices })
+          this.selectCellsIf(() => true)
         }
         break
       case 'ArrowLeft':
@@ -652,26 +699,8 @@ class Page extends React.Component<{}, PageState> {
         }
       })
     }
-    if (data.command !== undefined) {
-      if (
-        data.command === 'redo' &&
-        this.state.boardStateIndex < this.boardStates.length - 1
-      ) {
-        this.setState((state) => ({
-          boardStateIndex: state.boardStateIndex + 1,
-        }))
-        this.updateClients({
-          state: this.boardStates[this.state.boardStateIndex + 1],
-        })
-      }
-      if (data.command === 'undo' && this.state.boardStateIndex > 0) {
-        this.setState((state) => ({
-          boardStateIndex: state.boardStateIndex - 1,
-        }))
-        this.updateClients({
-          state: this.boardStates[this.state.boardStateIndex - 1],
-        })
-      }
+    if (data.traverseHistory !== undefined) {
+      this.traverseBoardHistory(data.traverseHistory)
     }
   }
 
@@ -744,6 +773,7 @@ class Page extends React.Component<{}, PageState> {
         }))
       }
       if (data.state !== undefined) {
+        // TODO: make this less bad
         this.boardStates.push(data.state)
         this.setState((state) => ({
           boardStateIndex: state.boardStateIndex + 1,
@@ -837,7 +867,18 @@ class Page extends React.Component<{}, PageState> {
       clients: Map<string, DataConnection>
       host: DataConnection | null
     }) => (
-      <SidebarContainer>
+      <Drawer
+        sx={{
+          width: 300,
+          flexShrink: 0,
+          // '& .MuiDrawer-paper': {
+          //   width: 300,
+          //   boxSizing: 'border-box',
+          // },
+        }}
+        variant="permanent"
+        anchor="right"
+      >
         <Divider>Color</Divider>
         <CompactPicker
           colors={colorPickerColors}
@@ -898,7 +939,7 @@ class Page extends React.Component<{}, PageState> {
         <Accordion>
           <TextareaAutosize minRows={5} style={{ width: '100%' }} />
         </Accordion>
-      </SidebarContainer>
+      </Drawer>
     ),
   )
 
@@ -916,7 +957,8 @@ class Page extends React.Component<{}, PageState> {
       host,
     } = this.state
     return (
-      <PageContainer>
+      <Box>
+        <Button>hello</Button>
         <GridContainer>
           <GridBackground
             style={image.imageData ? { backgroundColor: '#ffffff' } : {}}
@@ -937,42 +979,14 @@ class Page extends React.Component<{}, PageState> {
                     ...out,
                     ...rowData.map((cell, column) => {
                       const index = row + ',' + column
-                      const selectorConnKeys = Object.keys(
-                        multiUserdata,
-                      ).filter(
-                        (key) =>
-                          key !== onlineId &&
-                          multiUserdata[key].selectorIndex === index,
-                      )
-                      const selectedConnKeys = Object.keys(
-                        multiUserdata,
-                      ).filter(
-                        (key) =>
-                          key !== onlineId &&
-                          multiUserdata[key]?.selectedIndices?.includes(index),
-                      )
                       return (
                         <GridCell
                           select={this.select}
-                          boxGap={image.imageData ? '1px' : '2px'}
-                          cellGap={image.imageData ? '0px' : '1px'}
                           key={index}
-                          conflict={this.conflicts[row][column]}
-                          selectedColor={
-                            // Check if in the list
-                            myUserdata.selectedIndices.includes(index)
-                              ? myUserdata.color
-                              : selectedConnKeys.length > 0
-                              ? multiUserdata[selectedConnKeys[0]].color
-                              : null
-                          }
-                          selectorColor={
-                            myUserdata.selectorIndex === index
-                              ? myUserdata.color
-                              : selectorConnKeys.length > 0
-                              ? multiUserdata[selectorConnKeys[0]].color
-                              : null
-                          }
+                          conflictData={this.conflicts[row][column]}
+                          onlineId={onlineId}
+                          myUserdata={myUserdata}
+                          multiUserdata={multiUserdata}
                           data={cell}
                           index={index}
                           imageLoaded={!!image.imageData}
@@ -995,7 +1009,7 @@ class Page extends React.Component<{}, PageState> {
           clients={clients}
           host={host}
         />
-      </PageContainer>
+      </Box>
     )
   }
 }

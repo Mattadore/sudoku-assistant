@@ -296,6 +296,16 @@ export const addConflicts = (
   }
 }
 
+export const arraysSame = <T,>(arrA: T[], arrB: T[]): boolean => {
+  if (arrA.length !== arrB.length) return false
+  for (let i = 0; i < arrA.length; ++i) {
+    if (arrA[i] !== arrB[i]) {
+      return false
+    }
+  }
+  return true
+}
+
 export const inplaceMerge = <T extends Object>(obj: T, diff: Diff<T>) => {
   if (obj === undefined || obj === null) return
   for (let [key, value] of Object.entries(diff)) {
@@ -315,6 +325,22 @@ export const inplaceMerge = <T extends Object>(obj: T, diff: Diff<T>) => {
     }
   }
 }
+
+// export const compare = <T extends Object>(objA: Object, objB: Object) => {
+//   if ()
+//   if (
+//     typeof value == 'boolean' ||
+//     typeof value == 'number' ||
+//     typeof value == 'string' ||
+//     value == null
+//   ) {
+//     obj[key as keyof T] = value as any
+//   } else if (value instanceof Array) {
+//     obj[key as keyof T] = value as any
+//   } else {
+//     inplaceMerge((obj as any)[key], value as any)
+//   }
+// }
 
 export const createMerge = <T extends Object>(obj: T, diff: Diff<T>) => {
   return produce(obj, (draft) => {

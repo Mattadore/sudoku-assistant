@@ -1,5 +1,5 @@
 import './src/global.css'
-import 'semantic-ui-css/semantic.min.css'
+// import 'semantic-ui-css/semantic.min.css'
 
 // const React = require('react')
 // const Mui = require('@mui/material')
