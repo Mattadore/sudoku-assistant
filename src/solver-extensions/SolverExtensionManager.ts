@@ -18,11 +18,10 @@ export class SolverExtensionManager {
       const [row, column] = index.split(',').map((i) => parseInt(i))
       const boardIndex: BoardIndex = [row, column]
       for (const extensionName in this.extensions) {
-        if (!this.extensions[extensionName].isRelevant(boardIndex)) continue
-        const conflictList = this.extensions[extensionName].getCellConflicts(
-          board,
-          boardIndex,
-        )
+        const extension = this.extensions[extensionName]
+        if (extension.isRelevant && !extension.isRelevant(boardIndex)) continue
+        // if (!this.extensions[extensionName].isRelevant(boardIndex)) continue
+        const conflictList = extension.getCellConflicts(board, boardIndex)
         removeConflicts(this.conflictMatrix, boardIndex, extensionName)
         addConflicts(
           this.conflictMatrix,

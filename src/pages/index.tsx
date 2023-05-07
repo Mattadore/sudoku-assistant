@@ -20,7 +20,6 @@ import {
   getDiff,
   getDeepDiff,
   preprocessImage,
-  validate,
   inplaceMerge,
   createMerge,
   stringIndex,
@@ -426,7 +425,6 @@ class Page extends React.Component<{}, PageState> {
     this.boardStates.push(out)
     this.updateConflicts(boardStateIndex, boardStateIndex + 1)
     if (this.state.hostId !== null) {
-      console.log('DIFF:', diff)
       this.updateHost({ boardupdate: diff })
     } else {
       this.updateClients({ state: out })
@@ -458,7 +456,7 @@ class Page extends React.Component<{}, PageState> {
     const { selectedIndices } = this.state.myUserdata
     this.mutateBoard((cells) => {
       for (const selected of selectedIndices) {
-        const [row, column] = selected.split(',').map((i) => parseInt(i))
+        const [row, column] = splitIndex(selected)
         update(cells[row][column])
       }
     })
@@ -468,7 +466,7 @@ class Page extends React.Component<{}, PageState> {
     const { selectedIndices } = this.state.myUserdata
     const boardState = this.boardStates[this.state.boardStateIndex]
     for (const selected of selectedIndices) {
-      const [row, column] = selected.split(',').map((i) => parseInt(i))
+      const [row, column] = splitIndex(selected)
       if (!test(boardState[row][column])) {
         return false
       }
@@ -555,9 +553,7 @@ class Page extends React.Component<{}, PageState> {
       }
     }
 
-    const [row, column] = myUserdata.selectorIndex
-      .split(',')
-      .map((i) => parseInt(i))
+    const [row, column] = splitIndex(myUserdata.selectorIndex)
     switch (event.key) {
       case 'y':
         if (event.ctrlKey) {
@@ -579,22 +575,22 @@ class Page extends React.Component<{}, PageState> {
         break
       case 'ArrowLeft':
         if (column > 0) {
-          this.select(row + ',' + (column - 1), event)
+          this.select(stringIndex(row, column - 1), event)
         }
         break
       case 'ArrowRight':
         if (column < this.numColumns - 1) {
-          this.select(row + ',' + (column + 1), event)
+          this.select(stringIndex(row, column + 1), event)
         }
         break
       case 'ArrowUp':
         if (row > 0) {
-          this.select(row - 1 + ',' + column, event)
+          this.select(stringIndex(row - 1, column), event)
         }
         break
       case 'ArrowDown':
         if (row < this.numRows - 1) {
-          this.select(row + 1 + ',' + column, event)
+          this.select(stringIndex(row + 1, column), event)
         }
         break
       case 'Delete':
@@ -662,7 +658,6 @@ class Page extends React.Component<{}, PageState> {
 
   // Process data from clients
   hostProcessData = (id: string, data: ClientToHostData) => {
-    console.log('HPD')
     if (!data || Object.keys(data).length === 0) {
       console.error('Empty data received')
       return
@@ -694,7 +689,7 @@ class Page extends React.Component<{}, PageState> {
     if (data.boardupdate !== undefined) {
       this.mutateBoard((cells) => {
         for (let index in data.boardupdate) {
-          const [row, column] = index.split(',').map((i) => parseInt(i))
+          const [row, column] = splitIndex(index)
           inplaceMerge(cells[row][column], data.boardupdate[index])
         }
       })
@@ -787,10 +782,10 @@ class Page extends React.Component<{}, PageState> {
         this.imageLoad(blob)
       }
     })
-    this.setState((state) => ({
+    this.setState({
       hostId,
       host: conn,
-    }))
+    })
   }
 
   pageClicked = () => {
@@ -978,7 +973,7 @@ class Page extends React.Component<{}, PageState> {
                   (out, rowData, row) => [
                     ...out,
                     ...rowData.map((cell, column) => {
-                      const index = row + ',' + column
+                      const index = stringIndex(row, column)
                       return (
                         <GridCell
                           select={this.select}

@@ -59,8 +59,9 @@ interface SolverExtension {
   extensionName: string
   // Array of [row, col, conflict1, conflict2...]
   getCellConflicts: (board: BoardState, index: BoardIndex) => number[][]
+  // Does this extension actually care about this index?
+  isRelevant?: (index: BoardIndex) => boolean
   // iterates over every cell of every list and draws them
-  isRelevant: (index: BoardIndex) => boolean
   drawCell?: (board: BoardState, listIndex: number, cellIndex: number) => any
   draw?: (board: BoardState) => void
   settings?: {
