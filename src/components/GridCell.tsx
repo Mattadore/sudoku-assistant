@@ -200,6 +200,24 @@ export const GridCell: React.FC<GridCellProps> =
     )
   }
 
+const NumberAnnotation: React.FC<{
+  num: number
+  conflicts: number[]
+}> = (props) => (
+  <div
+    style={
+      props.conflicts.includes(props.num)
+        ? {
+            color: '#AC3235',
+            display: 'inline-block',
+          }
+        : { display: 'inline-block' }
+    }
+  >
+    {props.num}
+  </div>
+)
+
 const InternalGridCell: React.FC<InternalGridCellProps> = React.memo(
   ({
     index,
@@ -255,7 +273,11 @@ const InternalGridCell: React.FC<InternalGridCellProps> = React.memo(
             }
             className="noselect"
           >
-            {data.number ? data.number : data.center.numbers.join('')}
+            {data.number
+              ? data.number
+              : data.center.numbers.map((num) => (
+                  <NumberAnnotation num={num} conflicts={conflictList} />
+                ))}
             {!data.number && data.center.letters.join('')}
           </CentralNumberContainer>
           {selectorColors.length > 0 && (
@@ -291,11 +313,15 @@ const InternalGridCell: React.FC<InternalGridCellProps> = React.memo(
           {!data.number && (
             <>
               <HintNumberTopLeft className="noselect">
-                {data.topLeftCorner.numbers.join('')}
+                {data.topLeftCorner.numbers.map((num) => (
+                  <NumberAnnotation num={num} conflicts={conflictList} />
+                ))}
                 {data.topLeftCorner.letters.join('')}
               </HintNumberTopLeft>
               <HintNumberBottomRight className="noselect">
-                {data.bottomRightCorner.numbers.join('')}
+                {data.bottomRightCorner.numbers.map((num) => (
+                  <NumberAnnotation num={num} conflicts={conflictList} />
+                ))}
                 {data.bottomRightCorner.letters.join('')}
               </HintNumberBottomRight>
             </>

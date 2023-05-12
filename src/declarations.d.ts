@@ -33,13 +33,6 @@ interface Userdata {
   color: string
 }
 
-// interface ConflictData {
-//   // Map of cells that depend on the value of this cell to which numbers those cells care about
-//   dependencies: Map<BoardIndex, number[]>
-//   // List of numbers that conflict to the boardindices they conflict with, guaranteed to size of board
-//   conflicts: BoardIndex[][]
-// }
-
 interface ConflictData {
   // Map of cells that depend on the value of this cell to which numbers those cells care about
   dependencies: { [extension: string]: { [index: string]: number[] } }
@@ -53,8 +46,6 @@ type CellDiff = Diff<CellData>
 
 type BoardState = CellData[][]
 
-type ConflictList = { [key: string]: true }
-
 interface SolverExtension {
   extensionName: string
   // Array of [row, col, conflict1, conflict2...]
@@ -62,12 +53,10 @@ interface SolverExtension {
   // Does this extension actually care about this index?
   isRelevant?: (index: BoardIndex) => boolean
   // iterates over every cell of every list and draws them
-  drawCell?: (board: BoardState, listIndex: number, cellIndex: number) => any
+  drawCell?: (board: BoardState, row: number, column: number) => any
   draw?: (board: BoardState) => void
   settings?: {
     disableDefaultValidation?: boolean
-    // What % of the board needs to have changed to bypass incremental update and do a full recalc
-    bypassIncrementalDiffPercent?: number
   }
   loadFpuzzleData?: (data: any) => void
 }

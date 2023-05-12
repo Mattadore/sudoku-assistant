@@ -3,17 +3,24 @@ import * as React from 'react'
 import '../helper'
 import { graphql } from 'gatsby'
 import { CompactPicker } from 'react-color'
-import styled from '@emotion/styled'
+import emoStyled from '@emotion/styled'
+import { styled } from '@mui/material/styles'
 import { produce } from 'immer'
 // import { Divider, Button } from 'semantic-ui-react'
 import {
   Accordion,
+  AccordionProps,
+  AccordionSummary,
+  AccordionSummaryProps,
+  AccordionDetailsProps,
+  AccordionDetails,
   TextareaAutosize,
   Divider,
   Button,
   Drawer,
   Container,
   Box,
+  Typography,
 } from '@mui/material'
 import {
   getBoardDiff,
@@ -28,9 +35,9 @@ import {
 import { GridCell } from 'components'
 import type { Peer, DataConnection } from 'peerjs'
 import { SolverExtensionManager, Extensions } from 'solver-extensions'
-import chroma from 'chroma-js'
 import { ReactNode } from 'react'
-import { Helmet } from 'react-helmet'
+import { ArrowForwardIosSharp } from '@mui/icons-material'
+
 import '@fontsource/roboto/300.css'
 import '@fontsource/roboto/400.css'
 import '@fontsource/roboto/500.css'
@@ -57,7 +64,7 @@ type SudokuImageData = {
 
 const isBrowser = typeof window !== 'undefined'
 
-const SudokuImageCanvas = styled.canvas<{
+const SudokuImageCanvas = emoStyled.canvas<{
   image: SudokuImageData
 }>`
   position: absolute;
@@ -86,38 +93,73 @@ const SudokuImageCanvas = styled.canvas<{
       : '100%'};
 `
 
-// const PageContainer = styled.div`
+// const PageContainer = emoStyled.div`
 //   display: flex;
 //   width: 100%;
 //   height: 100vh;
 //   flex-direction: row;
 // `
 
-const SidebarContainer = styled.div`
-  flex: 1;
-  max-width: 25rem;
-  height: 100%;
-  background-color: #ffffff;
-`
+const SidebarContainer = styled('div')(({ theme }) => ({
+  width: '100%',
+  ...theme.typography.body2,
+}))
 
-const SudokuGrid = styled.div`
+const SidebarDivider = styled(Divider)(({ theme }) => ({
+  marginTop: theme.spacing(2),
+  marginBottom: theme.spacing(2),
+}))
+
+const SudokuGrid = styled(Box)`
   padding: 1px;
   display: grid;
   grid-template-columns: repeat(9, auto);
   grid-template-rows: repeat(9, auto);
 `
 
-const GridContainer = styled.div`
+const SidebarAccordion = styled((props: AccordionProps) => (
+  <Accordion disableGutters elevation={0} square {...props} />
+))(({ theme }) => ({
+  borderBottom: `1px solid ${theme.palette.divider}`,
+  '&:not(:last-child)': {
+    borderBottom: 0,
+  },
+  '&:before': {
+    display: 'none',
+  },
+}))
+
+const SidebarAccordionSummary = styled((props: AccordionSummaryProps) => (
+  <AccordionSummary
+    expandIcon={<ArrowForwardIosSharp sx={{ fontSize: '1rem' }} />}
+    {...props}
+  />
+))(({ theme }) => ({
+  borderTop: `1px solid ${theme.palette.divider}`,
+  borderBottom: `1px solid ${theme.palette.divider}`,
+  backgroundColor:
+    theme.palette.mode === 'dark'
+      ? 'rgba(255, 255, 255, .7)'
+      : 'rgba(0, 0, 0, .07)',
+  flexDirection: 'row-reverse',
+  '& .MuiAccordionSummary-expandIconWrapper.Mui-expanded': {
+    transform: 'rotate(90deg)',
+  },
+  '& .MuiAccordionSummary-content': {
+    marginLeft: theme.spacing(1),
+  },
+}))
+
+const GridContainer = styled(Box)`
   display: flex;
   align-items: center;
   justify-content: center;
-  background-color: #ddddff;
   flex: 1;
   user-select: none;
   cursor: default;
 `
 
-const GridBackground = styled.div`
+const GridBackground = styled(Box)`
   position: relative;
   margin: 0;
   padding: 0px;
@@ -280,7 +322,7 @@ class Page extends React.Component<{}, PageState> {
   }
 
   updateClients = (payload: HostToClientData) => {
-    for (const [clientId, client] of this.state.clients) {
+    for (const [, client] of this.state.clients) {
       this.sendDataToClient(client, payload)
     }
   }
@@ -306,7 +348,7 @@ class Page extends React.Component<{}, PageState> {
       }
       return
     }
-    const { myUserdata, image } = this.state
+    const { myUserdata } = this.state
     // if (!event.altKey) {
     this.updateUserdata({ selectorIndex: index })
     // }
@@ -673,18 +715,6 @@ class Page extends React.Component<{}, PageState> {
         return out
       })
       this.updateClients({ userdataMap: { id: data.userdataDiff } })
-      /*        if (data.userdataDiff !== undefined) {
-      let diff: Diff<Userdata>
-      this.setState((state) => {
-        const out = {
-          multiUserdata: createMerge(state.multiUserdata, {
-            id: data.userdataDiff,
-          }),
-        }
-        diff = getDeepDiff(state.multiUserdata, out.multiUserdata)
-        this.updateClients({ userdataMap: { id: diff } })
-        return out
-      })*/
     }
     if (data.boardupdate !== undefined) {
       this.mutateBoard((cells) => {
@@ -864,76 +894,118 @@ class Page extends React.Component<{}, PageState> {
     }) => (
       <Drawer
         sx={{
-          width: 300,
+          width: 350,
           flexShrink: 0,
-          // '& .MuiDrawer-paper': {
-          //   width: 300,
-          //   boxSizing: 'border-box',
-          // },
+          '& .MuiDrawer-paper': {
+            width: 350,
+            boxSizing: 'border-box',
+          },
         }}
         variant="permanent"
         anchor="right"
       >
-        <Divider>Color</Divider>
-        <CompactPicker
-          colors={colorPickerColors}
-          color={pickingMe ? myColor : selectedColor}
-          onChangeComplete={(color) => {
-            // setColor(color.hex)
-            if (pickingMe) {
-              this.setState({ pickingMe: false })
-              this.updateUserdata({ color: color.hex })
-              localStorage.color = color.hex
-            } else {
-              this.setState({ selectedColor: color.hex })
-              this.mutateSelectedCells((cell) => {
-                cell.color = color.hex
-              })
-            }
-          }}
-        />
-        <Button
-          onClick={(event) => {
-            this.setState((state) => ({ pickingMe: !state.pickingMe }))
-          }}
-          style={{ backgroundColor: myColor }}
-        >
-          {pickingMe ? 'Picking my color...' : 'Pick my color'}{' '}
-        </Button>
-        <Divider>File</Divider>
-        <input type="file" id="upload-button" onChange={this.fileInput} />
-        <Divider>Multiplayer</Divider>
-        ID: {onlineId} <br />
-        <span>
-          <input
-            // type="text"
-            onKeyDown={(event) => {
-              if (event.key === 'Enter') {
-                this.initiateClient()
-              }
-            }}
-            onChange={(event) => {
-              this.setState({ hostIdText: event.target.value })
-            }}
-            value={hostIdText}
-          />
-          <span style={{ float: 'right' }}>
-            {clients.size !== 0
-              ? 'HOST'
-              : host != null
-              ? 'CLIENT'
-              : 'NOT CONNECTED'}
-          </span>
-        </span>
-        <br />
-        {this.state.hostId && 'Host is: ' + this.state.hostId}
-        {clients.size !== 0 &&
-          'Clients are: ' +
-            Array.from(clients, ([name, value]) => name).join(', ')}
-        <Divider>Notes</Divider>
-        <Accordion>
-          <TextareaAutosize minRows={5} style={{ width: '100%' }} />
-        </Accordion>
+        <SidebarContainer>
+          <SidebarAccordion>
+            <SidebarAccordionSummary>
+              <Typography>Color</Typography>
+            </SidebarAccordionSummary>
+            <AccordionDetails>
+              <CompactPicker
+                colors={colorPickerColors}
+                color={pickingMe ? myColor : selectedColor}
+                onChangeComplete={(color) => {
+                  // setColor(color.hex)
+                  if (pickingMe) {
+                    this.setState({ pickingMe: false })
+                    this.updateUserdata({ color: color.hex })
+                    localStorage.color = color.hex
+                  } else {
+                    this.setState({ selectedColor: color.hex })
+                    this.mutateSelectedCells((cell) => {
+                      cell.color = color.hex
+                    })
+                  }
+                }}
+              />
+              <br />
+              <Button
+                onClick={() => {
+                  this.setState((state) => ({ pickingMe: !state.pickingMe }))
+                }}
+                style={{ backgroundColor: myColor }}
+              >
+                {pickingMe ? 'Picking my color...' : 'Pick my color'}{' '}
+              </Button>
+            </AccordionDetails>
+          </SidebarAccordion>
+          <SidebarAccordion>
+            <SidebarAccordionSummary>
+              <Typography>File</Typography>
+            </SidebarAccordionSummary>
+            <AccordionDetails>
+              <input type="file" id="upload-button" onChange={this.fileInput} />
+            </AccordionDetails>
+          </SidebarAccordion>
+          <SidebarAccordion>
+            <SidebarAccordionSummary>
+              <Typography>Multiplayer</Typography>
+            </SidebarAccordionSummary>
+            <AccordionDetails>
+              <Typography
+                sx={(theme) => ({
+                  color: theme.palette.primary.main,
+                  userSelect: 'none',
+                })}
+                variant="h6"
+              >
+                Online ID:
+              </Typography>
+              <Typography>{onlineId}</Typography>
+              <span>
+                <input
+                  // type="text"
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') {
+                      this.initiateClient()
+                    }
+                  }}
+                  onChange={(event) => {
+                    this.setState({ hostIdText: event.target.value })
+                  }}
+                  value={hostIdText}
+                />
+                <span style={{ float: 'right' }}>
+                  {clients.size !== 0
+                    ? 'HOST'
+                    : host != null
+                    ? 'CLIENT'
+                    : 'NOT CONNECTED'}
+                </span>
+              </span>
+              <br />
+              {this.state.hostId && 'Host is: ' + this.state.hostId}
+              {clients.size !== 0 &&
+                'Clients are: ' +
+                  Array.from(clients, ([name]) => name).join(', ')}
+            </AccordionDetails>
+          </SidebarAccordion>
+          <SidebarAccordion>
+            <SidebarAccordionSummary>
+              <Typography>Notes</Typography>
+            </SidebarAccordionSummary>
+            <AccordionDetails>
+              <Box
+                css={{
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  display: 'flex',
+                }}
+              >
+                <TextareaAutosize minRows={5} style={{ width: '100%' }} />
+              </Box>
+            </AccordionDetails>
+          </SidebarAccordion>
+        </SidebarContainer>
       </Drawer>
     ),
   )
@@ -952,49 +1024,66 @@ class Page extends React.Component<{}, PageState> {
       host,
     } = this.state
     return (
-      <Box>
-        <Button>hello</Button>
-        <GridContainer>
-          <GridBackground
-            style={image.imageData ? { backgroundColor: '#ffffff' } : {}}
-            onMouseDown={(e) => {
-              //Stop click event from propagating to window, used for deselect checking
-              e.stopPropagation()
-            }}
-          >
-            <this.ImageCanvases image={image} />
-            {this.boardStates[boardStateIndex] && (
-              <SudokuGrid
-                style={{
-                  padding: image.imageData ? '1px' : '2px',
-                }}
-              >
-                {this.boardStates[boardStateIndex].reduce<ReactNode[]>(
-                  (out, rowData, row) => [
-                    ...out,
-                    ...rowData.map((cell, column) => {
-                      const index = stringIndex(row, column)
-                      return (
-                        <GridCell
-                          select={this.select}
-                          key={index}
-                          conflictData={this.conflicts[row][column]}
-                          onlineId={onlineId}
-                          myUserdata={myUserdata}
-                          multiUserdata={multiUserdata}
-                          data={cell}
-                          index={index}
-                          imageLoaded={!!image.imageData}
-                        />
-                      )
-                    }),
-                  ],
-                  [],
-                )}
-              </SudokuGrid>
-            )}
-          </GridBackground>
-        </GridContainer>
+      <Box
+        css={{
+          width: '100%',
+          height: '100vh',
+        }}
+      >
+        <style>{`
+          html {
+            width: 100%;
+            height: 100%;
+            background-color: #ddddff;
+          }
+          body {
+            margin: 0px;
+            padding: 0px;
+          }
+        `}</style>
+        <Container>
+          <GridContainer>
+            <GridBackground
+              // style={image.imageData ? { backgroundColor: '#ffffff' } : {}}
+              onMouseDown={(e) => {
+                //Stop click event from propagating to window, used for deselect checking
+                e.stopPropagation()
+              }}
+            >
+              <this.ImageCanvases image={image} />
+              {this.boardStates[boardStateIndex] && (
+                <SudokuGrid
+                  style={{
+                    padding: image.imageData ? '1px' : '2px',
+                  }}
+                >
+                  {this.boardStates[boardStateIndex].reduce<ReactNode[]>(
+                    (out, rowData, row) => [
+                      ...out,
+                      ...rowData.map((cell, column) => {
+                        const index = stringIndex(row, column)
+                        return (
+                          <GridCell
+                            select={this.select}
+                            key={index}
+                            conflictData={this.conflicts[row][column]}
+                            onlineId={onlineId}
+                            myUserdata={myUserdata}
+                            multiUserdata={multiUserdata}
+                            data={cell}
+                            index={index}
+                            imageLoaded={!!image.imageData}
+                          />
+                        )
+                      }),
+                    ],
+                    [],
+                  )}
+                </SudokuGrid>
+              )}
+            </GridBackground>
+          </GridContainer>
+        </Container>
         <this.Sidebar
           pickingMe={pickingMe}
           myColor={myUserdata.color}
