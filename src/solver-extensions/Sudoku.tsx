@@ -5,7 +5,7 @@ export default class Sudoku implements SolverExtension {
     if (!num) return []
     const numRows = board.length
     const numCols = board[0].length
-    const conflicts = []
+    const conflicts: [number, number, number][] = []
     for (let row = 0; row < numRows; ++row) {
       if (row !== index[0]) {
         conflicts.push([row, index[1], num])

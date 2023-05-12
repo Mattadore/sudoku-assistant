@@ -42,6 +42,7 @@ import '@fontsource/roboto/300.css'
 import '@fontsource/roboto/400.css'
 import '@fontsource/roboto/500.css'
 import '@fontsource/roboto/700.css'
+import Sudoku from '../solver-extensions/Sudoku'
 
 // to generate all types from graphQL schema
 interface IndexPageProps {
@@ -300,7 +301,7 @@ class Page extends React.Component<{}, PageState> {
         })
       }
     }
-    this.extensionManager.initialize(this.boardStates[0], ['Sudoku'])
+    this.extensionManager.initialize(this.boardStates[0], [new Sudoku()])
     this.conflicts = this.extensionManager.getConflictMatrix()
     // window.onbeforeunload = () => 'Are you sure you want to abandon the doku?'
   }
@@ -343,7 +344,15 @@ class Page extends React.Component<{}, PageState> {
       const [row, col] = splitIndex(index)
       const number =
         this.boardStates[this.state.boardStateIndex][row][col].number
-      if (number) {
+      if (event.shiftKey && number) {
+        this.selectCellsIf(
+          (cell) =>
+            cell.number === number ||
+            cell.center.numbers.includes(number) ||
+            cell.bottomRightCorner.numbers.includes(number) ||
+            cell.topLeftCorner.numbers.includes(number),
+        )
+      } else if (number) {
         this.selectCellsIf((cell) => cell.number === number)
       }
       return

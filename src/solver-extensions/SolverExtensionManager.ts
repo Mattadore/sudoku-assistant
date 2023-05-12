@@ -1,5 +1,6 @@
 import { addConflicts, removeConflicts } from 'helper'
 import { Extensions } from 'solver-extensions'
+import Sudoku from './Sudoku'
 
 export class SolverExtensionManager {
   extensions: { [key: string]: SolverExtension } = {}
@@ -33,7 +34,7 @@ export class SolverExtensionManager {
     }
   }
 
-  initialize = (board: BoardState, extensions: (keyof typeof Extensions)[]) => {
+  initialize = (board: BoardState, extensions: (InstanceType<typeof Extensions[keyof typeof Extensions]>)[]) => {
     // Create the conflict matrix
     const rows = board.length
     const cols = board[0].length
@@ -44,7 +45,7 @@ export class SolverExtensionManager {
           dependencies: extensions.reduce(
             (acc, extension) => ({
               ...acc,
-              [extension]: {},
+              [extension.extensionName]: {},
             }),
             {},
           ),
@@ -56,7 +57,7 @@ export class SolverExtensionManager {
       }
     }
     for (const extension of extensions) {
-      this.loadExtension(new Extensions[extension](), board)
+      this.loadExtension(extension, board)
     }
     // this.loadExtension()
   }
