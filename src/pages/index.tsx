@@ -1,6 +1,5 @@
 import * as React from 'react'
 // import Link from 'gatsby-link'
-import '../helper'
 import { graphql } from 'gatsby'
 import { CompactPicker } from 'react-color'
 import emoStyled from '@emotion/styled'

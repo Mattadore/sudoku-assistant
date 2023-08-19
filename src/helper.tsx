@@ -47,6 +47,7 @@ export const getDiff = <T extends Object>(before: T, after: T) => {
   return diff
 }
 
+// are the values themselves actually different, not just ref
 export const getDeepDiff = <T extends Object>(before: T, after: T) => {
   const diff: Diff<T> = {}
   for (let prop in before) {
@@ -306,6 +307,19 @@ export const arraysSame = <T,>(arrA: T[], arrB: T[]): boolean => {
   return true
 }
 
+export const haveSameMembers = <T extends { [key: string]: any }>(
+  A: T,
+  B: T,
+): boolean => {
+  if (Object.keys(A).length !== Object.keys(B).length) return false
+  for (let key of Object.keys(A)) {
+    if (!(key in B) || A[key] !== B[key]) {
+      return false
+    }
+  }
+  return true
+}
+
 export const inplaceMerge = <T extends Object>(obj: T, diff: Diff<T>) => {
   if (obj === undefined || obj === null) return
   for (let [key, value] of Object.entries(diff)) {
@@ -330,4 +344,35 @@ export const createMerge = <T extends Object>(obj: T, diff: Diff<T>) => {
   return produce(obj, (draft) => {
     inplaceMerge(draft as T, diff)
   })
+}
+
+// Returns the polygon vertices needed to trace a portion of a background color
+// as double percents
+export const makeBackgroundColorPoly = (
+  numSegments: number,
+  segment: number,
+): [number, number][] => {
+  const vertices: [number, number][] = []
+  if (numSegments > 2) {
+    vertices.push([0.5, 0.5])
+  }
+  const slice = (Math.PI * 2) / numSegments
+  const start = slice * segment
+  const end = slice * (segment + 1)
+  const angles = [start]
+  // check corners, clockwise from top right
+  for (let i = 0; i < 4; ++i) {
+    const corner = Math.PI / 4 + (Math.PI / 2) * i
+    if (corner > start && corner < end) {
+      angles.push(corner)
+    }
+  }
+  angles.push(end)
+  for (let angle of angles) {
+    const x = Math.sin(angle)
+    const y = Math.cos(angle)
+    const max = Math.max(x, y)
+    vertices.push([(x / max + 1) / 2, (y / max + 1) / 2])
+  }
+  return vertices
 }
