@@ -1,8 +1,7 @@
 import * as React from 'react'
-import type { PageProps } from 'gatsby'
 import { compressor } from 'external'
 
-export default ({ path, location }: PageProps) => {
+export default function DecodePage() {
   const [text, setText] = React.useState('')
   const [decoded, setDecoded] = React.useState('')
   const onTextChanged = (event: React.ChangeEvent<HTMLInputElement>) => {

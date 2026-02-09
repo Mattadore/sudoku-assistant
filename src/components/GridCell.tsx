@@ -1,10 +1,12 @@
 import * as React from 'react'
-
+import { useMemo } from 'react'
 import emoStyled from '@emotion/styled'
 import { styled } from '@mui/material/styles'
-import { splitIndex, arraysSame } from '../helper'
-
 import { Typography } from '@mui/material'
+import { useGameStore } from '../stores/gameStore'
+import { useExtensionStore } from '../stores/extensionStore'
+import { useNetworkStore } from '../stores/networkStore'
+import { stringIndex } from 'helper'
 
 const GridCellStyle = emoStyled.div`
   width: 5rem;
@@ -90,152 +92,99 @@ const HintNumberBottomRight = styled(Typography)`
 `
 
 interface GridCellProps {
-  index: string
+  row: number
+  column: number
   imageLoaded: boolean
-  data: CellData
-  myUserdata: Userdata
-  multiUserdata: { [key: string]: Userdata }
-  onlineId: string
   select: (
     index: string,
     event: KeyboardEvent | React.MouseEvent<HTMLDivElement, MouseEvent>,
     multi?: boolean,
   ) => void
-  conflictData: ConflictData
 }
-
-// An internal version of GridCell designed to be memoized
-interface InternalGridCellProps {
-  index: string
-  imageLoaded: boolean
-  data: CellData
-  // myUserdata: Userdata
-  // multiUserdata: { [key: string]: Userdata }
-  selectedColors: string[]
-  selectorColors: string[]
-  select: (
-    index: string,
-    event: KeyboardEvent | React.MouseEvent<HTMLDivElement, MouseEvent>,
-    multi?: boolean,
-  ) => void
-  conflictList: number[]
-}
-
-export const GridCell: React.FC<GridCellProps> =
-  /*React.memo*/
-  ({
-    index,
-    imageLoaded,
-    data,
-    myUserdata,
-    multiUserdata,
-    select,
-    conflictData,
-    onlineId,
-  }) => {
-    const conflictList = React.useRef<number[]>([])
-    const selectorColors = React.useRef<string[]>([])
-    const selectedColors = React.useRef<string[]>([])
-
-    const selectorConnKeys = Object.keys(multiUserdata).filter(
-      (key) => key !== onlineId && multiUserdata[key].selectorIndex === index,
-    )
-
-    const selectedConnKeys = Object.keys(multiUserdata).filter(
-      (key) =>
-        key !== onlineId &&
-        multiUserdata[key]?.selectedIndices?.includes(index),
-    )
-
-    const newSelectedColors = []
-    if (myUserdata.selectedIndices.includes(index)) {
-      newSelectedColors.push(myUserdata.color)
-    } else if (selectedConnKeys.length > 0) {
-      newSelectedColors.push(multiUserdata[selectedConnKeys[0]].color)
-    }
-
-    const newSelectorColors = []
-    if (myUserdata.selectorIndex === index) {
-      newSelectorColors.push(myUserdata.color)
-    } else if (selectorConnKeys.length > 0) {
-      newSelectorColors.push(multiUserdata[selectorConnKeys[0]].color)
-    }
-
-    const newConflictList: number[] = []
-    for (let num = 1; num <= conflictData.conflicts.length; ++num) {
-      if (conflictData.conflicts[num - 1].length > 0) {
-        if (
-          data.bottomRightCorner.numbers.includes(num) ||
-          data.topLeftCorner.numbers.includes(num) ||
-          data.center.numbers.includes(num) ||
-          data.number === num
-        ) {
-          newConflictList.push(num)
-        }
-      }
-    }
-
-    if (!arraysSame(newSelectedColors, selectedColors.current)) {
-      selectedColors.current = newSelectedColors
-    }
-
-    if (!arraysSame(newSelectorColors, selectorColors.current)) {
-      selectorColors.current = newSelectorColors
-    }
-
-    if (!arraysSame(newConflictList, conflictList.current)) {
-      conflictList.current = newConflictList
-    }
-
-    return (
-      <InternalGridCell
-        imageLoaded={imageLoaded}
-        index={index}
-        data={data}
-        select={select}
-        conflictList={conflictList.current}
-        selectedColors={selectedColors.current}
-        selectorColors={selectorColors.current}
-      />
-    )
-  }
 
 const NumberAnnotation: React.FC<{
   num: number
   conflicts: number[]
-}> = (props) => (
-  <div
+}> = ({ num, conflicts }) => (
+  <span
     style={
-      props.conflicts.includes(props.num)
-        ? {
-            color: '#AC3235',
-            display: 'inline-block',
-          }
+      conflicts.includes(num)
+        ? { color: '#AC3235', display: 'inline-block' }
         : { display: 'inline-block' }
     }
   >
-    {props.num}
-  </div>
+    {num}
+  </span>
 )
 
-const InternalGridCell: React.FC<InternalGridCellProps> = React.memo(
-  ({
-    index,
-    data,
-    select,
-    imageLoaded,
-    selectedColors,
-    selectorColors,
-    conflictList,
-  }) => {
-    const [row, column] = splitIndex(index)
+export const GridCell: React.FC<GridCellProps> = React.memo(
+  ({ row, column, imageLoaded, select }) => {
+    const index = stringIndex(row, column)
     const boxGap = imageLoaded ? '1px' : '2px'
     const cellGap = imageLoaded ? '0px' : '1px'
+
+    // Granular selectors — only re-render when THIS cell's data changes
+    const data = useGameStore((s) => s.gameState.boardState[row][column])
+    const conflictData = useExtensionStore((s) => s.conflictMatrix[row]?.[column])
+
+    // Granular userdata selectors
+    const mySelectedIndices = useNetworkStore(
+      (s) => s.myUserdata.selectedIndices,
+    )
+    const mySelectorIndex = useNetworkStore((s) => s.myUserdata.selectorIndex)
+    const myColor = useNetworkStore((s) => s.myUserdata.color)
+
+    // For multi-user: extract only what this cell needs
+    const otherUserColor = useNetworkStore((s) => {
+      for (const key of Object.keys(s.multiUserdata)) {
+        if (key === s.onlineId) continue
+        const ud = s.multiUserdata[key]
+        if (ud?.selectedIndices?.includes(index)) return ud.color
+      }
+      return null
+    })
+    const otherSelectorColor = useNetworkStore((s) => {
+      for (const key of Object.keys(s.multiUserdata)) {
+        if (key === s.onlineId) continue
+        if (s.multiUserdata[key]?.selectorIndex === index)
+          return s.multiUserdata[key].color
+      }
+      return null
+    })
+
+    // Memoize derived values
+    const selectedColor = useMemo(() => {
+      if (mySelectedIndices.includes(index)) return myColor
+      return otherUserColor
+    }, [mySelectedIndices, index, myColor, otherUserColor])
+
+    const selectorColor = useMemo(() => {
+      if (mySelectorIndex === index) return myColor
+      return otherSelectorColor
+    }, [mySelectorIndex, index, myColor, otherSelectorColor])
+
+    const conflictList = useMemo(() => {
+      if (!conflictData) return []
+      const list: number[] = []
+      for (let num = 1; num <= conflictData.conflicts.length; ++num) {
+        if (conflictData.conflicts[num - 1].length > 0) {
+          if (
+            data.number === num ||
+            data.center.numbers.includes(num) ||
+            data.topLeftCorner.numbers.includes(num) ||
+            data.bottomRightCorner.numbers.includes(num)
+          ) {
+            list.push(num)
+          }
+        }
+      }
+      return list
+    }, [conflictData, data])
+
     return (
       <GridCellStyle
         onMouseDown={(e) => {
           e.preventDefault()
-          // e.stopPropagation()
           select(index, e)
         }}
         onMouseEnter={(e) => {
@@ -261,7 +210,6 @@ const InternalGridCell: React.FC<InternalGridCellProps> = React.memo(
               : '#ffffff',
           }}
         />
-        {/* <GridCellHighlightedStyle /> */}
         <NumbersContainer>
           <CentralNumberContainer
             style={
@@ -276,51 +224,43 @@ const InternalGridCell: React.FC<InternalGridCellProps> = React.memo(
             {data.number
               ? data.number
               : data.center.numbers.map((num) => (
-                  <NumberAnnotation num={num} conflicts={conflictList} />
+                  <NumberAnnotation key={num} num={num} conflicts={conflictList} />
                 ))}
             {!data.number && data.center.letters.join('')}
           </CentralNumberContainer>
-          {selectorColors.length > 0 && (
+          {selectorColor && (
             <>
               <GridCellHighlightedUp
-                style={{ backgroundColor: selectorColors[0] }}
+                style={{ backgroundColor: selectorColor }}
               />
               <GridCellHighlightedAcross
-                style={{ backgroundColor: selectorColors[0] }}
+                style={{ backgroundColor: selectorColor }}
               />
               <GridCellHighlightedUp
-                style={{
-                  backgroundColor: selectorColors[0],
-                  top: '5rem',
-                }}
+                style={{ backgroundColor: selectorColor, top: '5rem' }}
               />
               <GridCellHighlightedAcross
-                style={{
-                  backgroundColor: selectorColors[0],
-                  left: '5em',
-                }}
+                style={{ backgroundColor: selectorColor, left: '5em' }}
               />
             </>
           )}
-          {selectedColors.length > 0 && (
-            <>
-              <GridSelectedCircle
-                style={{ backgroundColor: selectedColors[0] }}
-              />
-            </>
+          {selectedColor && (
+            <GridSelectedCircle
+              style={{ backgroundColor: selectedColor }}
+            />
           )}
 
           {!data.number && (
             <>
               <HintNumberTopLeft className="noselect">
                 {data.topLeftCorner.numbers.map((num) => (
-                  <NumberAnnotation num={num} conflicts={conflictList} />
+                  <NumberAnnotation key={num} num={num} conflicts={conflictList} />
                 ))}
                 {data.topLeftCorner.letters.join('')}
               </HintNumberTopLeft>
               <HintNumberBottomRight className="noselect">
                 {data.bottomRightCorner.numbers.map((num) => (
-                  <NumberAnnotation num={num} conflicts={conflictList} />
+                  <NumberAnnotation key={num} num={num} conflicts={conflictList} />
                 ))}
                 {data.bottomRightCorner.letters.join('')}
               </HintNumberBottomRight>

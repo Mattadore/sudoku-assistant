@@ -1,5 +1,5 @@
 export default class Sudoku implements SolverExtension {
-  extensionName = 'Sudoku'
+  extensionName = 'sudoku'
   getCellConflicts = (board: BoardState, index: BoardIndex) => {
     const num = board[index[0]][index[1]].number
     if (!num) return []

@@ -1,127 +1,5 @@
-import * as React from 'react'
 import chroma from 'chroma-js'
 import { produce } from 'immer'
-import { SolverExtensionManager } from 'solver-extensions'
-
-// get a differential tree btwn two states
-export const getBoardDiff = (
-  starting: CellData[][],
-  updated: CellData[][],
-): { [key: string]: CellDiff } => {
-  const diff: { [key: string]: CellDiff } = {}
-  for (const row in updated) {
-    if (starting[row] === updated[row]) continue
-    for (const column in updated[row]) {
-      if (starting[row][column] !== updated[row][column]) {
-        const diffkey = row + ',' + column
-        diff[diffkey] = getDiff(starting[row][column], updated[row][column])
-        if (Object.keys(diff[diffkey]).length === 0) {
-          delete diff[diffkey]
-        }
-      }
-    }
-  }
-
-  return diff
-}
-
-export const getDiff = <T extends Object>(before: T, after: T) => {
-  const diff: Diff<T> = {}
-  for (let prop in before) {
-    if (before[prop] !== after[prop]) {
-      const value = after[prop]
-      if (
-        typeof before[prop] != typeof after[prop] ||
-        typeof value == 'boolean' ||
-        typeof value == 'number' ||
-        typeof value == 'string' ||
-        value == null ||
-        value instanceof Array
-      ) {
-        diff[prop] = after[prop]
-      } else {
-        diff[prop] = getDiff(before[prop] as Object, after[prop] as Object)
-      }
-    }
-  }
-  return diff
-}
-
-// are the values themselves actually different, not just ref
-export const getDeepDiff = <T extends Object>(before: T, after: T) => {
-  const diff: Diff<T> = {}
-  for (let prop in before) {
-    // if (before[prop] !== after[prop]) {
-    const value = after[prop]
-    if (
-      typeof before[prop] != typeof after[prop] ||
-      typeof value == 'boolean' ||
-      typeof value == 'number' ||
-      typeof value == 'string' ||
-      value == null ||
-      value instanceof Array
-    ) {
-      if (JSON.stringify(before[prop]) !== JSON.stringify(after[prop])) {
-        diff[prop] = value
-      }
-    } else {
-      diff[prop] = getDiff(before[prop] as Object, after[prop] as Object)
-    }
-    // }
-  }
-  return diff
-}
-
-// export const getUserDiff = (
-//   starting: Userdata,
-//   updated: Userdata,
-// ): Diff<Userdata> => {
-//   const diff: { [key: string]: CellDiff } = {}
-//   for (const row in updated) {
-//     if (starting[row] === updated[row]) continue
-//     for (const column in updated[row]) {
-//       if (starting[row][column] !== updated[row][column]) {
-//         const diffkey = row + ',' + column
-//         diff[diffkey] = {}
-//         let prop: keyof CellData
-//         for (prop in updated[row][column]) {
-//           if (updated[row][column][prop] !== starting[row][column][prop]) {
-//             // ts does not know how to handle this
-//             ;(diff[diffkey][prop] as any) = updated[row][column][prop] as any
-//           }
-//         }
-//         if (Object.keys(diff[diffkey]).length === 0) {
-//           delete diff[diffkey]
-//         }
-//       }
-//     }
-//   }
-
-//   return diff
-// }
-
-export const adjacentIndices = (
-  index: number,
-  x: number,
-  y: number,
-  width: number,
-  height: number,
-) => {
-  let indices = []
-  if (x > 0) {
-    indices.push(index - 1)
-  }
-  if (x < width - 1) {
-    indices.push(index + 1)
-  }
-  if (y > 0) {
-    indices.push(index - width)
-  }
-  if (y < height - 1) {
-    indices.push(index + width)
-  }
-  return indices
-}
 
 export const preprocessImage = (imageData: ImageData) => {
   const canvas: HTMLCanvasElement = document.getElementById(
@@ -136,29 +14,13 @@ export const preprocessImage = (imageData: ImageData) => {
 
   let newData: Uint8ClampedArray = new Uint8ClampedArray([...imageData.data])
 
-  // Blacken semi-dark pixels adjacent to black ones
-  // for (let index = 0; index < imageData.data.length / 4; ++index) {
-  //   const x = index % imageData.width
-  //   const y = Math.floor(index / imageData.width)
-  //   const pixelData = getPixel(imageData, index)
-  //   const [hue, saturation, value] = chroma([...pixelData.slice(0, 3)]).hsv()
-  //   if (value < 0.2) {
-  //     //is black
-  //     columns[x] = ++columns[x]
-  //     rows[y] = ++rows[y]
-  //   }
-  //   if (value > 0.8 || (saturation > 0.5 && Math.abs(value - 0.5) < 0.3)) {
-  //     annotationData[index * 4 + 3] = 0
-  //   }
-  // }
-
   let annotationData: Uint8ClampedArray = new Uint8ClampedArray([...newData])
 
   for (let index = 0; index < imageData.data.length / 4; ++index) {
     const x = index % imageData.width
     const y = Math.floor(index / imageData.width)
     const pixelData = getPixel(imageData, index)
-    const [hue, chromaValue, lightness] = chroma([
+    const [_hue, _chromaValue, lightness] = chroma([
       ...pixelData.slice(0, 3),
     ]).hcl()
     const transparency = pixelData[3]
@@ -170,7 +32,7 @@ export const preprocessImage = (imageData: ImageData) => {
     // if white or colored or semi transparent
     if (
       lightness > 50 &&
-      (lightness > 95 || /* chromaValue > 10 ||*/ transparency < 100)
+      (lightness > 95 || transparency < 100)
     ) {
       // remove from the annotation data
       annotationData[index * 4 + 3] = 0
@@ -190,27 +52,21 @@ export const preprocessImage = (imageData: ImageData) => {
   const bottomEdge =
     rows.length - 1 - rows.reverse().findIndex((value) => value > rowMax * 0.8)
 
-  // Figure out how many vertical bars there are
-  let gap: boolean = false
-  for (let x = leftEdge; x < rightEdge; ++x) {}
-
   // clean up the background pixels
   for (let index = 0; index < imageData.data.length / 4; ++index) {
     const x = index % imageData.width
     const y = Math.floor(index / imageData.width)
     const pixelData = getPixel(imageData, index)
-    const [hue, chromaValue, lightness] = chroma([
+    const [_hue, _chromaValue, lightness] = chroma([
       ...pixelData.slice(0, 3),
     ]).hcl()
     const transparency = pixelData[3]
-    // const intensity = (pixelData[0] + pixelData[1] + pixelData[2]) / 3
     if (
       (x > rightEdge || x < leftEdge || y < topEdge || y > bottomEdge) &&
       (lightness > 95 || transparency < 80)
     ) {
       newData[index * 4 + 3] = 0
     }
-    4
   }
 
   const newImageData = new ImageData(
@@ -297,29 +153,6 @@ export const addConflicts = (
   }
 }
 
-export const arraysSame = <T,>(arrA: T[], arrB: T[]): boolean => {
-  if (arrA.length !== arrB.length) return false
-  for (let i = 0; i < arrA.length; ++i) {
-    if (arrA[i] !== arrB[i]) {
-      return false
-    }
-  }
-  return true
-}
-
-export const haveSameMembers = <T extends { [key: string]: any }>(
-  A: T,
-  B: T,
-): boolean => {
-  if (Object.keys(A).length !== Object.keys(B).length) return false
-  for (let key of Object.keys(A)) {
-    if (!(key in B) || A[key] !== B[key]) {
-      return false
-    }
-  }
-  return true
-}
-
 export const inplaceMerge = <T extends Object>(obj: T, diff: Diff<T>) => {
   if (obj === undefined || obj === null) return
   for (let [key, value] of Object.entries(diff)) {
@@ -344,35 +177,4 @@ export const createMerge = <T extends Object>(obj: T, diff: Diff<T>) => {
   return produce(obj, (draft) => {
     inplaceMerge(draft as T, diff)
   })
-}
-
-// Returns the polygon vertices needed to trace a portion of a background color
-// as double percents
-export const makeBackgroundColorPoly = (
-  numSegments: number,
-  segment: number,
-): [number, number][] => {
-  const vertices: [number, number][] = []
-  if (numSegments > 2) {
-    vertices.push([0.5, 0.5])
-  }
-  const slice = (Math.PI * 2) / numSegments
-  const start = slice * segment
-  const end = slice * (segment + 1)
-  const angles = [start]
-  // check corners, clockwise from top right
-  for (let i = 0; i < 4; ++i) {
-    const corner = Math.PI / 4 + (Math.PI / 2) * i
-    if (corner > start && corner < end) {
-      angles.push(corner)
-    }
-  }
-  angles.push(end)
-  for (let angle of angles) {
-    const x = Math.sin(angle)
-    const y = Math.cos(angle)
-    const max = Math.max(x, y)
-    vertices.push([(x / max + 1) / 2, (y / max + 1) / 2])
-  }
-  return vertices
 }

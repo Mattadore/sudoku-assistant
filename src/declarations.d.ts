@@ -1,5 +1,3 @@
-declare const graphql: (query: TemplateStringsArray) => void
-
 // like Partial<> but recursive
 type Diff<T> = {
   [P in keyof T]?: Diff<T[P]>
@@ -36,7 +34,7 @@ interface Userdata {
 interface ConflictData {
   // Map of cells that depend on the value of this cell to which numbers those cells care about
   dependencies: { [extension: string]: { [index: string]: number[] } }
-  // List of numbers that conflict to the boardindices they conflict with, guaranteed to size of board
+  // List of numbers that conflict to the board indices they conflict with, guaranteed to size of board
   conflicts: BoardIndexExtension[][]
 }
 
@@ -52,13 +50,84 @@ interface SolverExtension {
   getCellConflicts: (board: BoardState, index: BoardIndex) => number[][]
   // Does this extension actually care about this index?
   isRelevant?: (index: BoardIndex) => boolean
-  // iterates over every cell of every list and draws them
-  drawCell?: (board: BoardState, row: number, column: number) => any
-  draw?: (board: BoardState) => void
+  // SVG/React element rendered inside a GridCell
+  getCellDecoration?: (board: BoardState, row: number, column: number) => any
+  // SVG/React element rendered as a board-level overlay
+  getBoardOverlay?: (board: BoardState, cellSize: number) => any
   settings?: {
     disableDefaultValidation?: boolean
   }
+  // Load constraint data from internal PuzzleDefinition format
+  loadPuzzleData?: (data: any) => void
+  // Legacy fpuzzles loader (used until full import pipeline is ready)
   loadFpuzzleData?: (data: any) => void
+  // React elements to render in the sidebar Extensions section
+  getSidebarControls?: () => any
 }
 
-interface SolverExtensionCellData {}
+// FPuzzles format types (from f-puzzles.com)
+interface FPuzzleCell {
+  value?: number
+  given?: boolean
+  c?: string
+  region?: number
+  centerPencilMarks?: number[]
+  givenPencilMarks?: number[]
+}
+
+interface FPuzzleLineConstraint {
+  lines: string[][]
+}
+
+interface FPuzzleKillerCage {
+  cells: string[]
+  value?: string
+}
+
+interface FPuzzleData {
+  size: number
+  title?: string
+  author?: string
+  ruleset?: string
+  grid: FPuzzleCell[][]
+  antiknight?: boolean
+  antiking?: boolean
+  disjointgroups?: boolean
+  nonconsecutive?: boolean
+  'diagonal+'?: boolean
+  'diagonal-'?: boolean
+  thermometer?: FPuzzleLineConstraint[]
+  palindrome?: FPuzzleLineConstraint[]
+  renban?: FPuzzleLineConstraint[]
+  whispers?: FPuzzleLineConstraint[]
+  betweenline?: FPuzzleLineConstraint[]
+  killercage?: FPuzzleKillerCage[]
+  [key: string]: any
+}
+
+// Internal puzzle format
+interface PuzzleCell {
+  given?: number
+  color?: string
+}
+
+interface PuzzleConstraint {
+  type: string
+  data?: any
+}
+
+interface PuzzleDefinition {
+  metadata: {
+    title?: string
+    author?: string
+    ruleset?: string
+    source?: 'fpuzzles' | 'ctc' | 'penpa' | 'internal'
+    sourceUrl?: string
+  }
+  grid: {
+    size: number
+    regions?: number[][]
+    cells: PuzzleCell[][]
+  }
+  constraints: PuzzleConstraint[]
+}
