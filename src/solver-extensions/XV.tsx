@@ -1,3 +1,6 @@
+import { cellCenter, gridViewBox, overlayStyle } from './svgHelpers'
+import { FONT_FAMILY } from '../theme'
+
 type XVData = { pairs: { cells: [BoardIndex, BoardIndex]; value: 'X' | 'V' }[] }
 
 export default class XV implements SolverExtension {
@@ -27,21 +30,33 @@ export default class XV implements SolverExtension {
     return conflicts
   }
 
+  serializeConstraints = (_rows: number, cols: number): SolverConstraint[] => {
+    return this.data.pairs.map((pair) => ({
+      type: 'xv' as const,
+      cell0: pair.cells[0][0] * cols + pair.cells[0][1],
+      cell1: pair.cells[1][0] * cols + pair.cells[1][1],
+      total: pair.value === 'X' ? 10 : 5,
+    }))
+  }
+
   getBoardOverlay = (_board: BoardState, cellSize: number): any => {
     if (this.data.pairs.length === 0) return null
-    const { cellCenter, gridViewBox, overlayStyle } = require('./svgHelpers')
     const cc = (r: number, c: number) => cellCenter(r, c, cellSize)
     return (
-      <svg style={overlayStyle()} viewBox={gridViewBox(cellSize)}>
+      <svg style={overlayStyle()} viewBox={gridViewBox(cellSize, _board.length, _board[0].length)}>
         {this.data.pairs.map((pair, i) => {
           const a = cc(pair.cells[0][0], pair.cells[0][1])
           const b = cc(pair.cells[1][0], pair.cells[1][1])
           const mx = (a.x + b.x) / 2
           const my = (a.y + b.y) / 2
+          const r = cellSize * 0.14
           return (
-            <text key={i} x={mx} y={my} textAnchor="middle" dominantBaseline="central" fontSize={14} fontWeight="bold" fill="#333" opacity={0.8}>
-              {pair.value}
-            </text>
+            <g key={i}>
+              <circle cx={mx} cy={my} r={r} fill="white" />
+              <text x={mx} y={my} textAnchor="middle" dominantBaseline="central" fontSize={20} fontFamily={FONT_FAMILY} fontWeight="bold" fill="#111">
+                {pair.value}
+              </text>
+            </g>
           )
         })}
       </svg>

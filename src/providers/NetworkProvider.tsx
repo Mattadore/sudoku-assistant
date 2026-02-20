@@ -7,6 +7,10 @@ export const NetworkProvider: React.FC<{ children: React.ReactNode }> = ({
   useEffect(() => {
     if (typeof window === 'undefined') return
 
+    if (typeof localStorage.color === 'string') {
+      useNetworkStore.getState().updateUserdata({ color: localStorage.color })
+    }
+
     useNetworkStore.getState().initializePeer()
 
     return () => {

@@ -1,3 +1,5 @@
+import { cellCenter, gridViewBox, overlayStyle } from './svgHelpers'
+
 type LineData = { lines: BoardIndex[][] }
 
 export default class Whispers implements SolverExtension {
@@ -30,13 +32,22 @@ export default class Whispers implements SolverExtension {
     return conflicts
   }
 
+  serializeConstraints = (_rows: number, cols: number): SolverConstraint[] => {
+    const pairs: [number, number][] = []
+    for (const line of this.data) {
+      for (let i = 0; i + 1 < line.length; i++) {
+        pairs.push([line[i][0] * cols + line[i][1], line[i + 1][0] * cols + line[i + 1][1]])
+      }
+    }
+    return pairs.length > 0 ? [{ type: 'whispers', pairs }] : []
+  }
+
   getBoardOverlay = (_board: BoardState, cellSize: number): any => {
     if (this.data.length === 0) return null
-    const { cellCenter, gridViewBox, overlayStyle } = require('./svgHelpers')
     const cc = (r: number, c: number) => cellCenter(r, c, cellSize)
     const lineWidth = cellSize * 0.2
     return (
-      <svg style={overlayStyle()} viewBox={gridViewBox(cellSize)}>
+      <svg style={overlayStyle()} viewBox={gridViewBox(cellSize, _board.length, _board[0].length)}>
         {this.data.map((line, i) => {
           const points = line.map(([r, c]) => { const p = cc(r, c); return `${p.x},${p.y}` }).join(' ')
           return <polyline key={i} points={points} fill="none" stroke="#44BB44" strokeWidth={lineWidth} strokeLinecap="round" strokeLinejoin="round" opacity={0.5} />

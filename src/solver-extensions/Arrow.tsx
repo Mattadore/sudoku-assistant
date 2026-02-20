@@ -1,3 +1,5 @@
+import { cellCenter, gridViewBox, overlayStyle } from './svgHelpers'
+
 type ArrowData = { arrows: { circle: BoardIndex[]; line: BoardIndex[][] }[] }
 
 export default class Arrow implements SolverExtension {
@@ -36,15 +38,22 @@ export default class Arrow implements SolverExtension {
     return conflicts
   }
 
+  serializeConstraints = (_rows: number, cols: number): SolverConstraint[] => {
+    return this.data.arrows.map((arrow) => ({
+      type: 'arrow' as const,
+      circle: arrow.circle.map(([r, c]) => r * cols + c),
+      lines: arrow.line.map((line) => line.map(([r, c]) => r * cols + c)),
+    }))
+  }
+
   getBoardOverlay = (_board: BoardState, cellSize: number): any => {
     if (this.data.arrows.length === 0) return null
-    const { cellCenter, gridViewBox, overlayStyle } = require('./svgHelpers')
     const cc = (r: number, c: number) => cellCenter(r, c, cellSize)
     const circleRadius = cellSize * 0.35
     const lineWidth = cellSize * 0.08
 
     return (
-      <svg style={overlayStyle()} viewBox={gridViewBox(cellSize)}>
+      <svg style={overlayStyle()} viewBox={gridViewBox(cellSize, _board.length, _board[0].length)}>
         <defs>
           <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
             <polygon points="0 0, 8 3, 0 6" fill="#AAAAAA" opacity="0.6" />

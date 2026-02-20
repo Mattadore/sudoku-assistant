@@ -1,3 +1,5 @@
+import { cellCenter, gridViewBox, overlayStyle } from './svgHelpers'
+
 type LineData = { lines: BoardIndex[][] }
 
 export default class Palindrome implements SolverExtension {
@@ -31,13 +33,23 @@ export default class Palindrome implements SolverExtension {
     return conflicts
   }
 
+  serializeConstraints = (_rows: number, cols: number): SolverConstraint[] => {
+    const pairs: [number, number][] = []
+    for (const line of this.data) {
+      const len = line.length
+      for (let i = 0; i < Math.floor(len / 2); i++) {
+        pairs.push([line[i][0] * cols + line[i][1], line[len - 1 - i][0] * cols + line[len - 1 - i][1]])
+      }
+    }
+    return pairs.length > 0 ? [{ type: 'palindrome', pairs }] : []
+  }
+
   getBoardOverlay = (_board: BoardState, cellSize: number): any => {
     if (this.data.length === 0) return null
-    const { cellCenter, gridViewBox, overlayStyle } = require('./svgHelpers')
     const cc = (r: number, c: number) => cellCenter(r, c, cellSize)
     const lineWidth = cellSize * 0.2
     return (
-      <svg style={overlayStyle()} viewBox={gridViewBox(cellSize)}>
+      <svg style={overlayStyle()} viewBox={gridViewBox(cellSize, _board.length, _board[0].length)}>
         {this.data.map((line, i) => {
           const points = line.map(([r, c]) => { const p = cc(r, c); return `${p.x},${p.y}` }).join(' ')
           return <polyline key={i} points={points} fill="none" stroke="#AAAAAA" strokeWidth={lineWidth} strokeLinecap="round" strokeLinejoin="round" opacity={0.5} />

@@ -1,6 +1,6 @@
-import { compressor } from 'external'
-import { useGameStore } from '../stores/gameStore'
+import { useGameStore, computeDefaultRegions } from '../stores/gameStore'
 import { useExtensionStore } from '../stores/extensionStore'
+import { useUIStore } from '../stores/uiStore'
 import Sudoku from '../solver-extensions/Sudoku'
 import Thermometer from '../solver-extensions/Thermometer'
 import KillerCage from '../solver-extensions/KillerCage'
@@ -19,6 +19,9 @@ import BetweenLine from '../solver-extensions/BetweenLine'
 import Difference from '../solver-extensions/Difference'
 import Ratio from '../solver-extensions/Ratio'
 import XV from '../solver-extensions/XV'
+import Cosmetics from '../solver-extensions/Cosmetics'
+import { fpuzzlesFormat, convertFPuzzleToPuzzle, decodeFPuzzle } from './fpuzzles'
+import { ctcFormat } from './ctc'
 
 const extensionConstructors: { [type: string]: () => SolverExtension } = {
   sudoku: () => new Sudoku(),
@@ -42,174 +45,35 @@ const extensionConstructors: { [type: string]: () => SolverExtension } = {
   difference: () => new Difference(),
   ratio: () => new Ratio(),
   xv: () => new XV(),
-}
-
-function parseFPuzzleCell(ref: string): BoardIndex {
-  const match = ref.match(/R(\d+)C(\d+)/)
-  if (!match) throw new Error(`Invalid cell reference: ${ref}`)
-  return [parseInt(match[1]) - 1, parseInt(match[2]) - 1]
-}
-
-export function convertFPuzzleToPuzzle(fpuzzle: FPuzzleData): PuzzleDefinition {
-  const size = fpuzzle.size
-  const cells: PuzzleCell[][] = []
-  for (let row = 0; row < size; row++) {
-    cells.push([])
-    for (let col = 0; col < size; col++) {
-      const fpCell = fpuzzle.grid[row]?.[col]
-      const cell: PuzzleCell = {}
-      if (fpCell?.given && fpCell?.value) cell.given = fpCell.value
-      if (fpCell?.c) cell.color = fpCell.c
-      cells[row].push(cell)
-    }
-  }
-
-  const constraints: PuzzleConstraint[] = [{ type: 'sudoku' }]
-
-  // Thermometers
-  if (fpuzzle.thermometer?.length) {
-    constraints.push({
-      type: 'thermometer',
-      data: { lines: fpuzzle.thermometer.map((t) => t.lines[0].map(parseFPuzzleCell)) },
-    })
-  }
-
-  // Killer cages
-  if (fpuzzle.killercage?.length) {
-    constraints.push({
-      type: 'killercage',
-      data: {
-        cages: fpuzzle.killercage.map((cage) => ({
-          cells: cage.cells.map(parseFPuzzleCell),
-          total: cage.value ? parseInt(cage.value) : undefined,
-        })),
-      },
-    })
-  }
-
-  // Arrow
-  if (fpuzzle.arrow?.length) {
-    constraints.push({
-      type: 'arrow',
-      data: {
-        arrows: fpuzzle.arrow.map((a: any) => ({
-          circle: (a.cells || []).map(parseFPuzzleCell),
-          line: (a.lines || []).map((line: string[]) => line.map(parseFPuzzleCell)),
-        })),
-      },
-    })
-  }
-
-  // Boolean constraints
-  if (fpuzzle.antiknight) constraints.push({ type: 'antiknight' })
-  if (fpuzzle.antiking) constraints.push({ type: 'antiking' })
-  if (fpuzzle['diagonal+']) constraints.push({ type: 'diagonal+' })
-  if (fpuzzle['diagonal-']) constraints.push({ type: 'diagonal-' })
-  if (fpuzzle.nonconsecutive) constraints.push({ type: 'nonconsecutive' })
-  if (fpuzzle.disjointgroups) constraints.push({ type: 'disjointgroups' })
-
-  // Line-based constraints
-  const lineTypes = ['palindrome', 'renban', 'whispers', 'betweenline'] as const
-  for (const type of lineTypes) {
-    const lineData = fpuzzle[type] as FPuzzleLineConstraint[] | undefined
-    if (lineData?.length) {
-      constraints.push({
-        type,
-        data: { lines: lineData.map((c) => c.lines[0].map(parseFPuzzleCell)) },
-      })
-    }
-  }
-
-  // Border constraints (difference, ratio, xv)
-  if (fpuzzle.difference?.length) {
-    constraints.push({
-      type: 'difference',
-      data: {
-        pairs: fpuzzle.difference.map((d: any) => ({
-          cells: d.cells.map(parseFPuzzleCell) as [BoardIndex, BoardIndex],
-          value: d.value ? parseInt(d.value) : undefined,
-        })),
-      },
-    })
-  }
-  if (fpuzzle.ratio?.length) {
-    constraints.push({
-      type: 'ratio',
-      data: {
-        pairs: fpuzzle.ratio.map((r: any) => ({
-          cells: r.cells.map(parseFPuzzleCell) as [BoardIndex, BoardIndex],
-          value: r.value ? parseInt(r.value) : undefined,
-        })),
-      },
-    })
-  }
-  if (fpuzzle.xv?.length) {
-    constraints.push({
-      type: 'xv',
-      data: {
-        pairs: fpuzzle.xv.map((x: any) => ({
-          cells: x.cells.map(parseFPuzzleCell) as [BoardIndex, BoardIndex],
-          value: x.value || 'X',
-        })),
-      },
-    })
-  }
-
-  // Cell markers (odd, even, min, max)
-  for (const type of ['odd', 'even', 'minimum', 'maximum'] as const) {
-    const markers = fpuzzle[type] as { cell: string }[] | undefined
-    if (markers?.length) {
-      constraints.push({
-        type,
-        data: { cells: markers.map((m) => parseFPuzzleCell(m.cell)) },
-      })
-    }
-  }
-
-  // Custom regions
-  let regions: number[][] | undefined
-  if (fpuzzle.grid.some((row) => row.some((cell) => cell.region !== undefined))) {
-    regions = fpuzzle.grid.map((row) => row.map((cell) => cell.region ?? 0))
-  }
-
-  return {
-    metadata: {
-      title: fpuzzle.title,
-      author: fpuzzle.author,
-      ruleset: fpuzzle.ruleset,
-      source: 'fpuzzles',
-    },
-    grid: { size, cells, regions },
-    constraints,
-  }
-}
-
-export function decodeFPuzzle(input: string): FPuzzleData {
-  let base64 = input
-  if (input.includes('?load=')) base64 = input.split('?load=')[1]
-  const json = compressor.decompressFromBase64(base64)
-  console.log(json)
-  if (!json) throw new Error('Failed to decompress puzzle data')
-  return JSON.parse(json) as FPuzzleData
+  cosmetics: () => new Cosmetics(),
 }
 
 export function loadPuzzle(puzzle: PuzzleDefinition) {
-  const { size, cells } = puzzle.grid
-  const gameStore = useGameStore.getState()
+  const { size, cells, regions } = puzzle.grid
   const extensionStore = useExtensionStore.getState()
 
-  gameStore.initializeBoard(size, size)
-  const boardState = useGameStore.getState().gameState.boardState
-
+  // Build fresh board state with given cells — avoids mutating existing cell
+  // objects in place, which would not trigger Zustand selector re-renders.
+  const boardState: BoardState = []
   for (let row = 0; row < size; row++) {
+    boardState.push([])
     for (let col = 0; col < size; col++) {
       const puzzleCell = cells[row]?.[col]
-      if (puzzleCell?.given) {
-        boardState[row][col].number = puzzleCell.given
-        boardState[row][col].fixed = true
-      }
-      if (puzzleCell?.color) boardState[row][col].color = [puzzleCell.color]
+      boardState[row].push({
+        number: puzzleCell?.given ?? null,
+        fixed: !!puzzleCell?.given,
+        color: puzzleCell?.color ? [puzzleCell.color] : [],
+        center: { numbers: [], letters: [] },
+        topLeftCorner: { numbers: [], letters: [] },
+        bottomRightCorner: { numbers: [], letters: [] },
+      })
     }
+  }
+
+  const gridConfig = {
+    rows: size,
+    cols: size,
+    regions: regions ?? computeDefaultRegions(size, size),
   }
 
   const extensions: SolverExtension[] = []
@@ -222,12 +86,74 @@ export function loadPuzzle(puzzle: PuzzleDefinition) {
   }
 
   extensionStore.initialize(boardState, extensions)
-  gameStore.loadFullState(boardState)
+  useGameStore.getState().loadFullState(boardState, gridConfig)
+
+  // Store known solution if provided by the puzzle
+  if (puzzle.metadata.solution && puzzle.metadata.solution.length === size * size) {
+    useGameStore.getState().setKnownSolution(puzzle.metadata.solution)
+  }
+
+  // Apply puzzle-level settings then reset the timer
+  const ui = useUIStore.getState()
+  ui.setConflictsEnabled(puzzle.settings?.conflictsEnabled ?? true)
+  ui.resetTimer()
+  ui.startTimer()
 }
 
-export function importFPuzzle(input: string) {
-  const fpuzzleData = decodeFPuzzle(input)
-  const puzzle = convertFPuzzleToPuzzle(fpuzzleData)
-  loadPuzzle(puzzle)
-  return puzzle
+/**
+ * Ordered list of registered puzzle format importers.
+ * Formats are tried in order; the first one whose detect() returns true wins.
+ * Add new formats here as they are implemented.
+ */
+const formats: PuzzleFormat[] = [ctcFormat, fpuzzlesFormat]
+
+/**
+ * Register a new puzzle format importer. Registered formats are tried before
+ * built-in ones, so third-party formats can take precedence.
+ */
+export function registerFormat(format: PuzzleFormat) {
+  formats.unshift(format)
+}
+
+/**
+ * Import a puzzle from any supported format. Auto-detects the format from the
+ * input string, converts to the internal PuzzleDefinition, loads it into the
+ * game state, and returns the definition (e.g. for displaying metadata).
+ *
+ * Supported inputs:
+ *   - f-puzzles.com URL or bare base64 string (LZ-string encoded)
+ *   - SudokuPad URL: https://sudokupad.app/ctc<data> or .../scl<data>
+ *   - Prefixed CTC string: ctc<data> or scl<data>
+ *   - Raw CTC JSON object
+ */
+export function importPuzzle(input: string): PuzzleDefinition {
+  const s = input.trim()
+  const decodeErrors: string[] = []
+
+  for (const fmt of formats) {
+    if (!fmt.detect(s)) continue
+    try {
+      const puzzle = fmt.decode(s)
+      loadPuzzle(puzzle)
+      return puzzle
+    } catch (e: any) {
+      // This format detected the input but failed to decode; try the next one
+      decodeErrors.push(`${fmt.name}: ${e?.message ?? 'unknown error'}`)
+    }
+  }
+
+  if (decodeErrors.length > 0) {
+    throw new Error(`Failed to import puzzle:\n${decodeErrors.join('\n')}`)
+  }
+  throw new Error(
+    'Unrecognized puzzle format. Paste an f-puzzles URL/base64 or a SudokuPad URL (sudokupad.app/ctc…).',
+  )
+}
+
+// Re-export FPuzzles helpers for backward compatibility (tests import these)
+export { convertFPuzzleToPuzzle, decodeFPuzzle }
+
+/** @deprecated Use importPuzzle() instead */
+export function importFPuzzle(input: string): PuzzleDefinition {
+  return importPuzzle(input)
 }

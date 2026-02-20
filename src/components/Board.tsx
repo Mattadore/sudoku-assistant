@@ -1,5 +1,5 @@
 import * as React from 'react'
-import { useEffect, useMemo } from 'react' // useMemo used by ConflictArrowOverlay
+import { useEffect, useMemo, useRef, useState } from 'react'
 import emoStyled from '@emotion/styled'
 import { styled } from '@mui/material/styles'
 import { Box, Chip, Container } from '@mui/material' // Chip used for conflict mode indicator
@@ -9,11 +9,15 @@ import { useExtensionStore } from '../stores/extensionStore'
 import { useUIStore } from '../stores/uiStore'
 import { splitIndex, extensionColor } from 'helper'
 import {
+  CELL_GAP,
   cellCenter,
+  cellRect,
   gridViewBox,
   overlayStyle,
+  underlayStyle,
 } from '../solver-extensions/svgHelpers'
 import { GridCell } from './GridCell'
+import { InputPad } from './InputPad'
 import { useSelection } from '../hooks/useSelection'
 import { useKeyboardHandler } from '../hooks/useKeyboardHandler'
 import { stringIndex } from 'helper'
@@ -56,10 +60,7 @@ const SudokuImageCanvas = emoStyled.canvas<{
 `
 
 const SudokuGrid = styled(Box)`
-  padding: 1px;
   display: grid;
-  grid-template-columns: repeat(9, auto);
-  grid-template-rows: repeat(9, auto);
 `
 
 const GridContainer = styled(Box)`
@@ -67,6 +68,9 @@ const GridContainer = styled(Box)`
   align-items: center;
   justify-content: center;
   flex: 1;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
   user-select: none;
   cursor: default;
 `
@@ -77,6 +81,11 @@ const GridBackground = styled(Box)`
   padding: 0px;
   background-color: #000000;
   z-index: 0;
+`
+
+// Outer area extends one cell stride outside the grid for outer clues
+const OuterArea = styled(Box)`
+  position: relative;
 `
 
 const ImageCanvases = React.memo(
@@ -103,14 +112,69 @@ const ImageCanvases = React.memo(
 
 // Cell size in px (matches GridCell 5rem = 80px at default font size)
 const CELL_SIZE = 80
+// One cell stride in SVG/CSS units (cell + gap). Used for outer area padding.
+const CELL_STRIDE = CELL_SIZE + CELL_GAP
+// SudokuGrid padding: half the cell gap so HTML grid dimensions match SVG viewBox exactly.
+// Each cell has 0.5px margin on each side, so the total gap between cells = 1px = CELL_GAP.
+// Grid padding = 0.5px means: grid edge (0.5px) + cell margin (0.5px) = 1px = CELL_GAP.
+const GRID_PAD = `${CELL_GAP / 2}px`
 
-// Static 9x9 grid indices — never changes, avoids recreating on every render
-const GRID_INDICES: [number, number][] = []
-for (let row = 0; row < 9; row++) {
-  for (let col = 0; col < 9; col++) {
-    GRID_INDICES.push([row, col])
+function makeGridIndices(rows: number, cols: number): [number, number][] {
+  const indices: [number, number][] = []
+  for (let row = 0; row < rows; row++) {
+    for (let col = 0; col < cols; col++) {
+      indices.push([row, col])
+    }
   }
+  return indices
 }
+
+const ExtensionUnderlays: React.FC = React.memo(() => {
+  const extensions = useExtensionStore((s) => s.extensions)
+  const boardState = useGameStore((s) => s.gameState.boardState)
+  const gridConfig = useGameStore((s) => s.gameState.gridConfig)
+  const disabledExtensions = useUIStore((s) => s.disabledExtensions)
+  const underlays = Object.values(extensions)
+    .filter(
+      (ext) =>
+        ext.getBoardUnderlay && !disabledExtensions.has(ext.extensionName),
+    )
+    .map((ext) => (
+      <React.Fragment key={ext.extensionName}>
+        {ext.getBoardUnderlay!(boardState, CELL_SIZE)}
+      </React.Fragment>
+    ))
+  if (underlays.length === 0) return null
+
+  // Build clip path from cell rectangles so grid lines remain visible
+  const clipRects: React.ReactNode[] = []
+  for (let r = 0; r < gridConfig.rows; r++) {
+    for (let c = 0; c < gridConfig.cols; c++) {
+      const rect = cellRect(r, c, CELL_SIZE)
+      clipRects.push(
+        <rect
+          key={`${r},${c}`}
+          x={rect.x}
+          y={rect.y}
+          width={rect.w}
+          height={rect.h}
+        />,
+      )
+    }
+  }
+
+  return (
+    <svg
+      viewBox={gridViewBox(CELL_SIZE, gridConfig.rows, gridConfig.cols)}
+      style={underlayStyle()}
+    >
+      <defs>
+        <clipPath id="cell-bounds-clip">{clipRects}</clipPath>
+      </defs>
+      <g clipPath="url(#cell-bounds-clip)">{underlays}</g>
+    </svg>
+  )
+})
 
 const ExtensionOverlays: React.FC = React.memo(() => {
   const extensions = useExtensionStore((s) => s.extensions)
@@ -128,9 +192,27 @@ const ExtensionOverlays: React.FC = React.memo(() => {
   return overlays.length > 0 ? <>{overlays}</> : null
 })
 
+const OuterExtensionOverlays: React.FC = React.memo(() => {
+  const extensions = useExtensionStore((s) => s.extensions)
+  const boardState = useGameStore((s) => s.gameState.boardState)
+  const disabledExtensions = useUIStore((s) => s.disabledExtensions)
+  const overlays = Object.values(extensions)
+    .filter(
+      (ext) =>
+        ext.getOuterOverlay && !disabledExtensions.has(ext.extensionName),
+    )
+    .map((ext) => (
+      <React.Fragment key={ext.extensionName}>
+        {ext.getOuterOverlay!(boardState, CELL_SIZE)}
+      </React.Fragment>
+    ))
+  return overlays.length > 0 ? <>{overlays}</> : null
+})
+
 const ConflictArrowOverlay: React.FC = React.memo(() => {
   const conflictMode = useUIStore((s) => s.conflictMode)
   const selectorIndex = useNetworkStore((s) => s.myUserdata.selectorIndex)
+  const gridConfig = useGameStore((s) => s.gameState.gridConfig)
 
   const cellNumber = useGameStore((s) => {
     if (!selectorIndex) return null
@@ -188,7 +270,7 @@ const ConflictArrowOverlay: React.FC = React.memo(() => {
 
   return (
     <svg
-      viewBox={gridViewBox(CELL_SIZE)}
+      viewBox={gridViewBox(CELL_SIZE, gridConfig.rows, gridConfig.cols)}
       style={{ ...overlayStyle(), zIndex: 600 }}
     >
       <defs>
@@ -227,10 +309,71 @@ const ConflictArrowOverlay: React.FC = React.memo(() => {
 export const Board: React.FC = () => {
   const image = useNetworkStore((s) => s.image)
   const imageLoaded = !!image.imageData
+  const gridConfig = useGameStore((s) => s.gameState.gridConfig)
   const selection = useSelection()
   const { select } = selection
 
   useKeyboardHandler(selection)
+
+  const gridIndices = useMemo(
+    () => makeGridIndices(gridConfig.rows, gridConfig.cols),
+    [gridConfig.rows, gridConfig.cols],
+  )
+
+  // --- Compact/mobile detection ---
+  const [isCompact, setIsCompact] = useState(false)
+  useEffect(() => {
+    if (typeof window === 'undefined') return
+    const mq = window.matchMedia('(max-width: 768px)')
+    setIsCompact(mq.matches)
+    const handler = (e: MediaQueryListEvent) => setIsCompact(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
+
+  // --- Grid scaling to fit container ---
+  const containerRef = useRef<HTMLDivElement>(null)
+  const [containerSize, setContainerSize] = useState({ w: 0, h: 0 })
+
+  useEffect(() => {
+    const el = containerRef.current
+    if (!el) return
+    const ro = new ResizeObserver((entries) => {
+      const { width, height } = entries[0].contentRect
+      setContainerSize({ w: width, h: height })
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [])
+
+  const padRef = useRef<HTMLDivElement>(null)
+  const [padWidth, setPadWidth] = useState(220)
+
+  useEffect(() => {
+    if (isCompact) return
+    const el = padRef.current
+    if (!el) return
+    const ro = new ResizeObserver((entries) => {
+      setPadWidth(entries[0].contentRect.width)
+    })
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [isCompact])
+
+  // Natural (unscaled) dimensions of the grid + outer area
+  const naturalW =
+    (gridConfig.cols + 2) * CELL_STRIDE + CELL_GAP
+  const naturalH =
+    (gridConfig.rows + 2) * CELL_STRIDE + CELL_GAP
+
+  const gridScale =
+    containerSize.w > 0 && containerSize.h > 0
+      ? Math.min(
+          (containerSize.w - (isCompact ? 0 : padWidth)) / naturalW,
+          containerSize.h / naturalH,
+          1,
+        )
+      : 1
 
   // Compute conflict highlights when selector changes
   const selectorIndex = useNetworkStore((s) => s.myUserdata.selectorIndex)
@@ -286,40 +429,126 @@ export const Board: React.FC = () => {
     return () => window.removeEventListener('mousedown', pageClicked)
   }, [])
 
+  // Detect puzzle completion: all cells filled with no conflicts
+  const boardState = useGameStore((s) => s.gameState.boardState)
+  const conflictMatrix = useExtensionStore((s) => s.conflictMatrix)
+  const timerRunning = useUIStore((s) => s.timerRunning)
+  useEffect(() => {
+    if (!timerRunning || boardState.length === 0 || conflictMatrix.length === 0)
+      return
+    let allFilled = true
+    let hasConflict = false
+    for (let r = 0; r < boardState.length && !hasConflict; r++) {
+      for (let c = 0; c < boardState[0].length; c++) {
+        if (!boardState[r][c].number) {
+          allFilled = false
+          break
+        }
+        const cd = conflictMatrix[r]?.[c]
+        if (cd) {
+          for (const nums of cd.conflicts) {
+            if (nums.length > 0) {
+              hasConflict = true
+              break
+            }
+          }
+        }
+      }
+      if (!allFilled) break
+    }
+    if (allFilled && !hasConflict) {
+      useUIStore.getState().pauseTimer()
+      const elapsed = useUIStore.getState().timerElapsed
+      const totalSec = Math.floor(elapsed / 1000)
+      const m = Math.floor(totalSec / 60)
+      const s = totalSec % 60
+      const timeStr = m > 0 ? `${m}m ${s}s` : `${s}s`
+      setTimeout(() => {
+        alert(`Congratulations! Puzzle solved in ${timeStr}!`)
+      }, 50)
+    }
+  }, [boardState, conflictMatrix, timerRunning])
+
   const conflictMode = useUIStore((s) => s.conflictMode)
 
   return (
-    <Container>
-      <GridContainer>
-        <GridBackground
-          onMouseDown={(e: React.MouseEvent) => {
-            e.stopPropagation()
+    <Container
+      disableGutters
+      maxWidth={false}
+      sx={{
+        display: 'flex',
+        flexDirection: isCompact ? 'column' : 'row',
+        alignItems: 'stretch',
+        flex: 1,
+        height: '100%',
+        overflow: 'hidden',
+      }}
+    >
+      <GridContainer ref={containerRef}>
+        <Box
+          sx={{
+            width: naturalW * gridScale,
+            height: naturalH * gridScale,
+            position: 'relative',
+            flexShrink: 0,
           }}
         >
-          <ImageCanvases image={image} />
-          <ExtensionOverlays />
-          <ConflictArrowOverlay />
-          <SudokuGrid style={{ padding: imageLoaded ? '1px' : '2px' }}>
-            {GRID_INDICES.map(([row, column]) => (
-              <GridCell
-                select={select}
-                key={stringIndex(row, column)}
-                row={row}
-                column={column}
-                imageLoaded={imageLoaded}
-              />
-            ))}
-          </SudokuGrid>
-        </GridBackground>
-        {conflictMode && (
-          <Chip
-            label="Conflict Mode"
-            size="small"
-            color="warning"
-            sx={{ position: 'absolute', bottom: 12, left: 12 }}
-          />
+          <Box
+            sx={{
+              transform: `scale(${gridScale})`,
+              transformOrigin: 'top left',
+              position: 'absolute',
+              top: 0,
+              left: 0,
+            }}
+          >
+            <OuterArea style={{ padding: CELL_STRIDE }}>
+              <OuterExtensionOverlays />
+              <GridBackground
+                onMouseDown={(e: React.MouseEvent) => {
+                  e.stopPropagation()
+                }}
+              >
+                <ImageCanvases image={image} />
+                <ExtensionUnderlays />
+                <ExtensionOverlays />
+                <ConflictArrowOverlay />
+                <SudokuGrid
+                  style={{
+                    padding: GRID_PAD,
+                    gridTemplateColumns: `repeat(${gridConfig.cols}, auto)`,
+                    gridTemplateRows: `repeat(${gridConfig.rows}, auto)`,
+                  }}
+                >
+                  {gridIndices.map(([row, column]) => (
+                    <GridCell
+                      select={select}
+                      key={stringIndex(row, column)}
+                      row={row}
+                      column={column}
+                      imageLoaded={imageLoaded}
+                    />
+                  ))}
+                </SudokuGrid>
+              </GridBackground>
+            </OuterArea>
+          </Box>
+          {conflictMode && (
+            <Chip
+              label="Conflict Mode"
+              size="small"
+              color="warning"
+              sx={{ position: 'absolute', bottom: 4, left: 4 }}
+            />
+          )}
+        </Box>
+        {!isCompact && (
+          <Box ref={padRef} sx={{ flexShrink: 0 }}>
+            <InputPad selection={selection} compact={false} />
+          </Box>
         )}
       </GridContainer>
+      {isCompact && <InputPad selection={selection} compact={true} />}
     </Container>
   )
 }

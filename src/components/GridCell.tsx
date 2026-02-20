@@ -35,7 +35,7 @@ const ConflictHighlightOverlay = emoStyled.div`
 const GridCellHighlightedAcross = emoStyled.div`
   z-index: 500;
   top: calc(50% - 2px);
-  left: -15px;
+  left: 0;
   width: 15px;
   height: 4px;
   position: absolute;
@@ -76,7 +76,7 @@ const NumbersContainer = emoStyled.div`
 const GridCellHighlightedUp = emoStyled.div`
   z-index: 500;
   left: calc(50% - 2px);
-  top: -15px;
+  top: 0;
   width: 4px;
   height: 15px;
   position: absolute;
@@ -132,8 +132,7 @@ const NumberAnnotation: React.FC<{
 export const GridCell: React.FC<GridCellProps> = React.memo(
   ({ row, column, imageLoaded, select }) => {
     const index = stringIndex(row, column)
-    const boxGap = imageLoaded ? '1px' : '2px'
-    const cellGap = imageLoaded ? '0px' : '1px'
+    const cellGap = '0.5px'
 
     // Granular selectors — only re-render when THIS cell's data changes
     const data = useGameStore((s) => s.gameState.boardState[row][column])
@@ -196,12 +195,7 @@ export const GridCell: React.FC<GridCellProps> = React.memo(
             select(index, e, true)
           }
         }}
-        style={{
-          marginLeft: column % 3 === 0 ? boxGap : cellGap,
-          marginRight: column % 3 === 2 ? boxGap : cellGap,
-          marginTop: row % 3 === 0 ? boxGap : cellGap,
-          marginBottom: row % 3 === 2 ? boxGap : cellGap,
-        }}
+        style={{ margin: cellGap }}
       >
         <GridCellBackground
           style={
@@ -255,10 +249,10 @@ export const GridCell: React.FC<GridCellProps> = React.memo(
                 style={{ backgroundColor: selectorColor }}
               />
               <GridCellHighlightedUp
-                style={{ backgroundColor: selectorColor, top: '5rem' }}
+                style={{ backgroundColor: selectorColor, top: 'calc(5rem - 15px)' }}
               />
               <GridCellHighlightedAcross
-                style={{ backgroundColor: selectorColor, left: '5em' }}
+                style={{ backgroundColor: selectorColor, left: 'calc(5em - 15px)' }}
               />
             </>
           )}

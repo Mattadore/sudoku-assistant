@@ -4,6 +4,21 @@ import { useExtensionStore } from '../stores/extensionStore'
 import { convertFPuzzleToPuzzle, loadPuzzle } from '../puzzle/import'
 import Sudoku from '../solver-extensions/Sudoku'
 
+// FPuzzleData with actual given cells
+const givensFpuzzle: FPuzzleData = {
+  size: 9,
+  title: 'Test Givens',
+  grid: Array.from({ length: 9 }, (_, r) =>
+    Array.from({ length: 9 }, (_, c) => {
+      // Place a few known givens
+      if (r === 0 && c === 0) return { given: true, value: 5 }
+      if (r === 4 && c === 4) return { given: true, value: 9 }
+      if (r === 8 && c === 8) return { given: true, value: 3 }
+      return {}
+    }),
+  ),
+}
+
 // Minimal FPuzzleData with thermometers
 const thermoFpuzzle: FPuzzleData = {
   size: 9,
@@ -38,6 +53,35 @@ describe('import pipeline', () => {
     )
   })
 
+  it('given cells appear in boardState after loadPuzzle', () => {
+    const puzzle = convertFPuzzleToPuzzle(givensFpuzzle)
+    loadPuzzle(puzzle)
+
+    const board = useGameStore.getState().gameState.boardState
+    expect(board[0][0].number).toBe(5)
+    expect(board[0][0].fixed).toBe(true)
+    expect(board[4][4].number).toBe(9)
+    expect(board[4][4].fixed).toBe(true)
+    expect(board[8][8].number).toBe(3)
+    expect(board[8][8].fixed).toBe(true)
+    // Empty cell should stay null
+    expect(board[0][1].number).toBeNull()
+    expect(board[0][1].fixed).toBe(false)
+  })
+
+  it('boardState cell objects are replaced (not mutated) after loadPuzzle', () => {
+    // Capture a reference to a cell BEFORE loading
+    const cellBefore = useGameStore.getState().gameState.boardState[0][0]
+
+    const puzzle = convertFPuzzleToPuzzle(givensFpuzzle)
+    loadPuzzle(puzzle)
+
+    const cellAfter = useGameStore.getState().gameState.boardState[0][0]
+    // The cell object must be a NEW reference so Zustand selectors re-render
+    expect(cellAfter).not.toBe(cellBefore)
+    expect(cellAfter.number).toBe(5)
+  })
+
   it('converts thermometer fpuzzle to PuzzleDefinition', () => {
     const puzzle = convertFPuzzleToPuzzle(thermoFpuzzle)
     expect(puzzle.constraints.length).toBe(2) // sudoku + thermometer
@@ -59,17 +103,17 @@ describe('import pipeline', () => {
     expect(Object.keys(extensions)).toContain('thermometer')
     const thermo = extensions['thermometer'] as any
     expect(thermo.data.length).toBe(2)
-    // Extension should have getBoardOverlay
-    expect(thermo.getBoardOverlay).toBeDefined()
+    // Extension should have getBoardUnderlay
+    expect(thermo.getBoardUnderlay).toBeDefined()
   })
 
-  it('thermometer extension has getBoardOverlay defined', () => {
+  it('thermometer extension has getBoardUnderlay defined', () => {
     const puzzle = convertFPuzzleToPuzzle(thermoFpuzzle)
     loadPuzzle(puzzle)
 
     const extensions = useExtensionStore.getState().extensions
     const thermo = extensions['thermometer']
-    expect(thermo.getBoardOverlay).toBeDefined()
+    expect(thermo.getBoardUnderlay).toBeDefined()
   })
 
   it('converts killer cage fpuzzle', () => {

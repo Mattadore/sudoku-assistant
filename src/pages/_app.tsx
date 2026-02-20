@@ -1,5 +1,6 @@
 import type { AppProps } from 'next/app'
-import { StyledEngineProvider } from '@mui/material/styles'
+import { StyledEngineProvider, ThemeProvider } from '@mui/material/styles'
+import { theme } from '../theme'
 import '../global.css'
 
 import '@fontsource/roboto/300.css'
@@ -10,7 +11,9 @@ import '@fontsource/roboto/700.css'
 export default function App({ Component, pageProps }: AppProps) {
   return (
     <StyledEngineProvider injectFirst>
-      <Component {...pageProps} />
+      <ThemeProvider theme={theme}>
+        <Component {...pageProps} />
+      </ThemeProvider>
     </StyledEngineProvider>
   )
 }

@@ -4,8 +4,15 @@ import { useExtensionStore } from './extensionStore'
 
 enablePatches()
 
+export interface GridConfig {
+  rows: number
+  cols: number
+  regions: number[][]
+}
+
 export interface GameState {
   boardState: BoardState
+  gridConfig: GridConfig
 }
 
 export interface HistoryEntry {
@@ -19,6 +26,8 @@ interface GameStore {
   history: HistoryEntry[]
   undoStacks: Map<string, HistoryEntry[]>
   initialState: GameState
+  /** Flat solution provided by the puzzle source (index = row*cols+col), if any */
+  knownSolution: number[] | null
 
   dispatch: (mutator: (draft: GameState) => void, userId: string) => Patch[]
   undo: (userId: string) => void
@@ -26,8 +35,9 @@ interface GameStore {
   canUndo: (userId: string) => boolean
   canRedo: (userId: string) => boolean
   applyRemotePatches: (patches: Patch[], userId: string) => void
-  loadFullState: (boardState: BoardState) => void
-  initializeBoard: (rows: number, cols: number) => void
+  loadFullState: (boardState: BoardState, gridConfig?: GridConfig) => void
+  initializeBoard: (rows: number, cols: number, regions?: number[][]) => void
+  setKnownSolution: (sol: number[] | null) => void
 }
 
 function extractChangedCells(patches: Patch[]): string[] {
@@ -44,6 +54,31 @@ function extractChangedCells(patches: Patch[]): string[] {
     }
   }
   return Array.from(indices)
+}
+
+export function computeDefaultRegions(rows: number, cols: number): number[][] {
+  // Find largest factor of rows that is <= sqrt(rows) for box height
+  // 9→3, 6→2, 4→2, 8→2, 16→4
+  let boxH = 1
+  for (let f = Math.floor(Math.sqrt(rows)); f >= 1; f--) {
+    if (rows % f === 0) {
+      boxH = f
+      break
+    }
+  }
+  const boxW = rows === cols ? rows / boxH : cols
+
+  const regionsPerRow = Math.ceil(cols / boxW)
+  const regions: number[][] = []
+  for (let r = 0; r < rows; r++) {
+    regions.push([])
+    for (let c = 0; c < cols; c++) {
+      const regionRow = Math.floor(r / boxH)
+      const regionCol = Math.floor(c / boxW)
+      regions[r].push(regionRow * regionsPerRow + regionCol)
+    }
+  }
+  return regions
 }
 
 function createEmptyBoard(rows: number, cols: number): BoardState {
@@ -64,22 +99,34 @@ function createEmptyBoard(rows: number, cols: number): BoardState {
   return board
 }
 
-const emptyState: GameState = { boardState: createEmptyBoard(9, 9) }
+const emptyState: GameState = {
+  boardState: createEmptyBoard(9, 9),
+  gridConfig: { rows: 9, cols: 9, regions: computeDefaultRegions(9, 9) },
+}
 
 export const useGameStore = create<GameStore>()((set, get) => ({
   gameState: emptyState,
   history: [],
   undoStacks: new Map(),
   initialState: emptyState,
+  knownSolution: null,
 
-  initializeBoard: (rows, cols) => {
+  setKnownSolution: (sol) => set({ knownSolution: sol }),
+
+  initializeBoard: (rows, cols, regions?) => {
     const boardState = createEmptyBoard(rows, cols)
-    const gameState = { boardState }
+    const gridConfig: GridConfig = {
+      rows,
+      cols,
+      regions: regions ?? computeDefaultRegions(rows, cols),
+    }
+    const gameState = { boardState, gridConfig }
     set({
       gameState,
       initialState: gameState,
       history: [],
       undoStacks: new Map(),
+      knownSolution: null,
     })
   },
 
@@ -240,13 +287,20 @@ export const useGameStore = create<GameStore>()((set, get) => ({
     })
   },
 
-  loadFullState: (boardState) => {
-    const gameState = { boardState }
+  loadFullState: (boardState, gridConfig?) => {
+    const rows = boardState.length
+    const cols = boardState[0]?.length ?? 0
+    const config = gridConfig ?? {
+      rows,
+      cols,
+      regions: computeDefaultRegions(rows, cols),
+    }
+    const gameState = { boardState, gridConfig: config }
 
     // Update all conflicts
     const allIndices: string[] = []
-    for (let row = 0; row < boardState.length; row++) {
-      for (let col = 0; col < boardState[0].length; col++) {
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
         allIndices.push(`${row},${col}`)
       }
     }

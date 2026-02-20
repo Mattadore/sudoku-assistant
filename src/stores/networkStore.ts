@@ -194,10 +194,7 @@ export const useNetworkStore = create<NetworkStore>()((set, get) => {
     myUserdata: {
       selectedIndices: [],
       selectorIndex: null,
-      color:
-        isBrowser && typeof localStorage.color === 'string'
-          ? localStorage.color
-          : '#ffcc00',
+      color: '#ffcc00',
     },
     multiUserdata: {},
 

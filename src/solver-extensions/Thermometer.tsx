@@ -1,3 +1,5 @@
+import { cellCenter } from './svgHelpers'
+
 // [thermo#][segment#] = [row, col]
 type ThermoData = BoardIndex[][]
 
@@ -51,17 +53,22 @@ export default class Thermometer implements SolverExtension {
     return conflicts
   }
 
-  getBoardOverlay = (_board: BoardState, cellSize: number): any => {
+  serializeConstraints = (_rows: number, cols: number): SolverConstraint[] => {
+    return this.data.map((thermo) => ({
+      type: 'thermo' as const,
+      cells: thermo.map(([r, c]) => r * cols + c),
+    }))
+  }
+
+  getBoardUnderlay = (_board: BoardState, cellSize: number): any => {
     if (this.data.length === 0) return null
 
-    const { cellCenter, gridViewBox, overlayStyle } = require('./svgHelpers')
     const cc = (r: number, c: number) => cellCenter(r, c, cellSize)
     const bulbRadius = cellSize * 0.3
     const lineWidth = cellSize * 0.2
 
     return (
-      <svg style={overlayStyle()} viewBox={gridViewBox(cellSize)}>
-
+      <>
         {this.data.map((thermo, i) => {
           if (thermo.length === 0) return null
           const [bulbRow, bulbCol] = thermo[0]
@@ -82,19 +89,17 @@ export default class Thermometer implements SolverExtension {
                 strokeWidth={lineWidth}
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                opacity={1}
               />
               <circle
                 cx={bulb.x}
                 cy={bulb.y}
                 r={bulbRadius}
                 fill="#AAAAAA"
-                opacity={1}
               />
             </g>
           )
         })}
-      </svg>
+      </>
     )
   }
 

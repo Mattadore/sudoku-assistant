@@ -12,6 +12,19 @@ interface UIStore {
 
   conflictMode: boolean
   toggleConflictMode: () => void
+
+  conflictsEnabled: boolean
+  setConflictsEnabled: (enabled: boolean) => void
+
+  inputMode: 'normal' | 'corner' | 'center' | 'color'
+  setInputMode: (mode: 'normal' | 'corner' | 'center' | 'color') => void
+
+  timerElapsed: number
+  timerRunning: boolean
+  startTimer: () => void
+  pauseTimer: () => void
+  resetTimer: () => void
+  tickTimer: (delta: number) => void
 }
 
 export const useUIStore = create<UIStore>()((set) => ({
@@ -33,4 +46,18 @@ export const useUIStore = create<UIStore>()((set) => ({
 
   conflictMode: false,
   toggleConflictMode: () => set((s) => ({ conflictMode: !s.conflictMode })),
+
+  conflictsEnabled: true,
+  setConflictsEnabled: (enabled) => set({ conflictsEnabled: enabled }),
+
+  inputMode: 'normal',
+  setInputMode: (mode) => set({ inputMode: mode }),
+
+  timerElapsed: 0,
+  timerRunning: false,
+  startTimer: () => set({ timerRunning: true }),
+  pauseTimer: () => set({ timerRunning: false }),
+  resetTimer: () => set({ timerElapsed: 0, timerRunning: false }),
+  tickTimer: (delta) =>
+    set((s) => (s.timerRunning ? { timerElapsed: s.timerElapsed + delta } : {})),
 }))

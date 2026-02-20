@@ -9,20 +9,26 @@ const Page = () => (
   <GameProvider>
     <NetworkProvider>
       <ExtensionProvider>
-        <Box css={{ width: '100%', height: '100vh' }}>
+        <Box
+          css={{
+            width: '100%',
+            height: '100vh',
+            display: 'flex',
+            overflow: 'hidden',
+          }}
+        >
           <style>{`
-            html {
+            html, body {
               width: 100%;
               height: 100%;
+              margin: 0;
+              padding: 0;
+              overflow: hidden;
               background-color: #ddddff;
             }
-            body {
-              margin: 0px;
-              padding: 0px;
-            }
           `}</style>
-          <Board />
           <Sidebar />
+          <Board />
         </Box>
       </ExtensionProvider>
     </NetworkProvider>

@@ -1,3 +1,5 @@
+import { cellCenter, gridViewBox, overlayStyle } from './svgHelpers'
+
 type PairData = { pairs: { cells: [BoardIndex, BoardIndex]; value?: number }[] }
 
 export default class Difference implements SolverExtension {
@@ -27,12 +29,20 @@ export default class Difference implements SolverExtension {
     return conflicts
   }
 
+  serializeConstraints = (_rows: number, cols: number): SolverConstraint[] => {
+    return this.data.pairs.map((pair) => ({
+      type: 'difference' as const,
+      cell0: pair.cells[0][0] * cols + pair.cells[0][1],
+      cell1: pair.cells[1][0] * cols + pair.cells[1][1],
+      diff: pair.value ?? 1,
+    }))
+  }
+
   getBoardOverlay = (_board: BoardState, cellSize: number): any => {
     if (this.data.pairs.length === 0) return null
-    const { cellCenter, gridViewBox, overlayStyle } = require('./svgHelpers')
     const cc = (r: number, c: number) => cellCenter(r, c, cellSize)
     return (
-      <svg style={overlayStyle()} viewBox={gridViewBox(cellSize)}>
+      <svg style={overlayStyle()} viewBox={gridViewBox(cellSize, _board.length, _board[0].length)}>
         {this.data.pairs.map((pair, i) => {
           const a = cc(pair.cells[0][0], pair.cells[0][1])
           const b = cc(pair.cells[1][0], pair.cells[1][1])

@@ -1,3 +1,5 @@
+import { cellCenter, gridViewBox, overlayStyle } from './svgHelpers'
+
 type LineData = { lines: BoardIndex[][] }
 
 export default class BetweenLine implements SolverExtension {
@@ -48,14 +50,20 @@ export default class BetweenLine implements SolverExtension {
     return conflicts
   }
 
+  serializeConstraints = (_rows: number, cols: number): SolverConstraint[] => {
+    return this.data.map((line) => ({
+      type: 'between' as const,
+      line: line.map(([r, c]) => r * cols + c),
+    }))
+  }
+
   getBoardOverlay = (_board: BoardState, cellSize: number): any => {
     if (this.data.length === 0) return null
-    const { cellCenter, gridViewBox, overlayStyle } = require('./svgHelpers')
     const cc = (r: number, c: number) => cellCenter(r, c, cellSize)
     const lineWidth = cellSize * 0.15
     const dotRadius = cellSize * 0.2
     return (
-      <svg style={overlayStyle()} viewBox={gridViewBox(cellSize)}>
+      <svg style={overlayStyle()} viewBox={gridViewBox(cellSize, _board.length, _board[0].length)}>
         {this.data.map((line, i) => {
           const points = line.map(([r, c]) => { const p = cc(r, c); return `${p.x},${p.y}` }).join(' ')
           const start = cc(line[0][0], line[0][1])

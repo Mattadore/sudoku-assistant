@@ -1,4 +1,5 @@
 import { useCallback, useEffect } from 'react'
+import { useGameStore } from '../stores/gameStore'
 import { useNetworkStore } from '../stores/networkStore'
 import { useUIStore } from '../stores/uiStore'
 import { stringIndex, splitIndex } from 'helper'
@@ -59,6 +60,7 @@ export function useKeyboardHandler(
       }
 
       const [row, column] = splitIndex(selectorIndex)
+      const { gridConfig } = useGameStore.getState().gameState
       switch (event.key) {
         case 'y':
           if (event.ctrlKey) {
@@ -82,13 +84,15 @@ export function useKeyboardHandler(
           if (column > 0) select(stringIndex(row, column - 1), event)
           break
         case 'ArrowRight':
-          if (column < 8) select(stringIndex(row, column + 1), event)
+          if (column < gridConfig.cols - 1)
+            select(stringIndex(row, column + 1), event)
           break
         case 'ArrowUp':
           if (row > 0) select(stringIndex(row - 1, column), event)
           break
         case 'ArrowDown':
-          if (row < 8) select(stringIndex(row + 1, column), event)
+          if (row < gridConfig.rows - 1)
+            select(stringIndex(row + 1, column), event)
           break
         case 'Backspace':
         case 'Delete':
@@ -97,15 +101,39 @@ export function useKeyboardHandler(
               if (cell.color.length > 0) cell.color = []
             })
           } else {
-            mutateSelectedCells((cell) => {
-              if (cell.number) {
-                cell.number = null
-              } else {
-                cell.center = { letters: [], numbers: [] }
-                cell.bottomRightCorner = { letters: [], numbers: [] }
-                cell.topLeftCorner = { letters: [], numbers: [] }
-              }
+            {
+            // Check all selected cells to decide what delete should do
+            const { selectedIndices } =
+              useNetworkStore.getState().myUserdata
+            const { boardState } = useGameStore.getState().gameState
+            const hasContent = (cell: CellData) =>
+              cell.number ||
+              cell.center.numbers.length > 0 ||
+              cell.center.letters.length > 0 ||
+              cell.topLeftCorner.numbers.length > 0 ||
+              cell.topLeftCorner.letters.length > 0 ||
+              cell.bottomRightCorner.numbers.length > 0 ||
+              cell.bottomRightCorner.letters.length > 0
+            const allEmpty = selectedIndices.every((idx) => {
+              const [r, c] = splitIndex(idx)
+              return !hasContent(boardState[r][c])
             })
+            if (allEmpty) {
+              mutateSelectedCells((cell) => {
+                cell.color = []
+              })
+            } else {
+              mutateSelectedCells((cell) => {
+                if (cell.number) {
+                  cell.number = null
+                } else {
+                  cell.center = { letters: [], numbers: [] }
+                  cell.bottomRightCorner = { letters: [], numbers: [] }
+                  cell.topLeftCorner = { letters: [], numbers: [] }
+                }
+              })
+            }
+          }
           }
           break
       }

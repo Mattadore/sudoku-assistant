@@ -1,4 +1,6 @@
 type CageData = { cages: { cells: BoardIndex[]; total?: number }[] }
+import { cellCenter, gridViewBox, overlayStyle } from './svgHelpers'
+import { FONT_FAMILY } from '../theme'
 
 export default class KillerCage implements SolverExtension {
   extensionName = 'killercage'
@@ -54,9 +56,16 @@ export default class KillerCage implements SolverExtension {
     return conflicts
   }
 
+  serializeConstraints = (_rows: number, cols: number): SolverConstraint[] => {
+    return this.data.cages.map((cage) => ({
+      type: 'killer_cage' as const,
+      cells: cage.cells.map(([r, c]) => r * cols + c),
+      total: cage.total,
+    }))
+  }
+
   getBoardOverlay = (_board: BoardState, cellSize: number): any => {
     if (this.data.cages.length === 0) return null
-    const { cellCenter, gridViewBox, overlayStyle } = require('./svgHelpers')
     const inset = 3.5
 
     // Compute the top-left corner of a cell's inset box
@@ -74,40 +83,61 @@ export default class KillerCage implements SolverExtension {
     }
 
     return (
-      <svg style={overlayStyle()} viewBox={gridViewBox(cellSize)}>
+      <svg
+        style={overlayStyle()}
+        viewBox={gridViewBox(cellSize, _board.length, _board[0].length)}
+      >
         {this.data.cages.map((cage, ci) => {
           const cellSet = new Set(cage.cells.map(([r, c]) => `${r},${c}`))
-          const segments: { x1: number; y1: number; x2: number; y2: number }[] = []
+          const segments: { x1: number; y1: number; x2: number; y2: number }[] =
+            []
           for (const [r, c] of cage.cells) {
             const tl = cellTopLeft(r, c)
             const br = cellBottomRight(r, c)
-            if (!cellSet.has(`${r - 1},${c}`)) segments.push({ x1: tl.x, y1: tl.y, x2: br.x, y2: tl.y })
-            if (!cellSet.has(`${r + 1},${c}`)) segments.push({ x1: tl.x, y1: br.y, x2: br.x, y2: br.y })
-            if (!cellSet.has(`${r},${c - 1}`)) segments.push({ x1: tl.x, y1: tl.y, x2: tl.x, y2: br.y })
-            if (!cellSet.has(`${r},${c + 1}`)) segments.push({ x1: br.x, y1: tl.y, x2: br.x, y2: br.y })
+            if (!cellSet.has(`${r - 1},${c}`))
+              segments.push({ x1: tl.x, y1: tl.y, x2: br.x, y2: tl.y })
+            if (!cellSet.has(`${r + 1},${c}`))
+              segments.push({ x1: tl.x, y1: br.y, x2: br.x, y2: br.y })
+            if (!cellSet.has(`${r},${c - 1}`))
+              segments.push({ x1: tl.x, y1: tl.y, x2: tl.x, y2: br.y })
+            if (!cellSet.has(`${r},${c + 1}`))
+              segments.push({ x1: br.x, y1: tl.y, x2: br.x, y2: br.y })
           }
           const firstTl = cellTopLeft(cage.cells[0][0], cage.cells[0][1])
           return (
             <g key={ci}>
-              {segments.map((s, si) => (
-                <line
-                  key={si}
-                  x1={s.x1}
-                  y1={s.y1}
-                  x2={s.x2}
-                  y2={s.y2}
-                  stroke="#111111"
-                  strokeWidth={1}
-                  strokeDasharray="5 3"
-                />
-              ))}
+              {segments.map((s, si) => {
+                // Compute segment length and a dash pattern that tiles evenly
+                const len = Math.abs(s.x2 - s.x1) + Math.abs(s.y2 - s.y1)
+                const targetDash = 6
+                const targetGap = 3
+                const unit = targetDash + targetGap
+                // Round to nearest whole number of dash+gap units
+                const count = Math.max(1, Math.round(len / unit))
+                const actualUnit = len / count
+                const dash = actualUnit * (targetDash / unit)
+                const gap = actualUnit * (targetGap / unit)
+                return (
+                  <line
+                    key={si}
+                    x1={s.x1}
+                    y1={s.y1}
+                    x2={s.x2}
+                    y2={s.y2}
+                    stroke="#333333"
+                    strokeWidth={1.2}
+                    strokeDasharray={`${dash} ${gap}`}
+                  />
+                )
+              })}
               {cage.total !== undefined && (
                 <text
-                  x={firstTl.x + 1}
-                  y={firstTl.y + 11}
-                  fontSize={10}
+                  x={firstTl.x + 4}
+                  y={firstTl.y + 13}
+                  fontSize={13}
+                  fontFamily={FONT_FAMILY}
                   fontWeight="bold"
-                  fill="#111111"
+                  fill="#333333"
                 >
                   {cage.total}
                 </text>
