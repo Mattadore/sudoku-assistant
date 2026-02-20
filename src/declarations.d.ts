@@ -13,6 +13,7 @@ type SolverConstraint =
   | { type: 'difference'; cell0: number; cell1: number; diff: number }
   | { type: 'ratio'; cell0: number; cell1: number; ratio: number }
   | { type: 'min_max'; cell: number; neighbors: number[]; isMax: boolean }
+  | { type: 'antiknight'; rows: number; cols: number }
 
 // like Partial<> but recursive
 type Diff<T> = {

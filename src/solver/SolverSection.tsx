@@ -65,14 +65,46 @@ function buildJobs(
 ): SolverJob[] {
   const maxDigit = Math.max(rows, cols)
 
-  // Find first empty cell
+  // Degree heuristic: branch on the empty cell that appears in the most constraints.
+  // This tends to create more constrained sub-problems than splitting on cell 0.
+  const N = rows * cols
+  const degree = new Int32Array(N)
+  for (const con of constraints) {
+    let cells: number[] = []
+    switch (con.type) {
+      case 'unique_group': cells = con.cells; break
+      case 'thermo':       cells = con.cells; break
+      case 'between':      cells = con.line; break
+      case 'killer_cage':  cells = con.cells; break
+      case 'arrow':
+        cells = [...con.circle]
+        for (const l of con.lines) cells.push(...l)
+        break
+      case 'renban':     cells = con.cells; break
+      case 'whispers':
+        for (const [a, b] of con.pairs) { cells.push(a); cells.push(b) }
+        break
+      case 'palindrome':
+        for (const [a, b] of con.pairs) { cells.push(a); cells.push(b) }
+        break
+      case 'xv':         cells = [con.cell0, con.cell1]; break
+      case 'difference': cells = [con.cell0, con.cell1]; break
+      case 'ratio':      cells = [con.cell0, con.cell1]; break
+      case 'min_max':    cells = [con.cell, ...con.neighbors]; break
+    }
+    for (const c of cells) degree[c]++
+  }
+
   let branchCell = -1
-  for (let i = 0; i < board.length; i++) {
-    if (board[i] === 0) { branchCell = i; break }
+  let bestDegree = -1
+  for (let i = 0; i < N; i++) {
+    if (board[i] === 0 && degree[i] > bestDegree) {
+      bestDegree = degree[i]
+      branchCell = i
+    }
   }
 
   if (branchCell === -1) {
-    // Board already fully filled — create a single job to validate
     return [{ jobId: 'j0', board: board.slice(), rows, cols, maxDigit, constraints }]
   }
 
@@ -80,14 +112,7 @@ function buildJobs(
   for (let d = 1; d <= maxDigit; d++) {
     const b = board.slice()
     b[branchCell] = d
-    jobs.push({
-      jobId: `j${d}`,
-      board: b,
-      rows,
-      cols,
-      maxDigit,
-      constraints,
-    })
+    jobs.push({ jobId: `j${d}`, board: b, rows, cols, maxDigit, constraints })
   }
   return jobs
 }

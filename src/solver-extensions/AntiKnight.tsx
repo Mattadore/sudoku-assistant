@@ -6,6 +6,10 @@ const KNIGHT_MOVES: [number, number][] = [
 export default class AntiKnight implements SolverExtension {
   extensionName = 'antiknight'
 
+  serializeConstraints = (rows: number, cols: number): SolverConstraint[] => {
+    return [{ type: 'antiknight', rows, cols }]
+  }
+
   getCellConflicts = (board: BoardState, index: BoardIndex): number[][] => {
     const num = board[index[0]][index[1]].number
     if (!num) return []

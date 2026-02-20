@@ -59,7 +59,10 @@ function buildCellConstraints(N: number, constraints: SolverConstraint[]): numbe
       case 'xv':           cells = [con.cell0, con.cell1]; break
       case 'difference':   cells = [con.cell0, con.cell1]; break
       case 'ratio':        cells = [con.cell0, con.cell1]; break
-      case 'min_max':      cells = [con.cell, ...con.neighbors]; break
+      case 'min_max':    cells = [con.cell, ...con.neighbors]; break
+      case 'antiknight':
+        for (let i = 0; i < N; i++) cc[i].push(ci)
+        continue
     }
     for (const c of cells) cc[c].push(ci)
   }
@@ -83,7 +86,7 @@ function applyConstraintProp(
   // Helper: remove a single digit bit from a cell's domain.
   // Returns false on contradiction. Adds to queue if becomes singleton.
   function removeBit(c: number, bit: number): boolean {
-    if (board[c] > 0) return true
+    if (board[c] > 0) return (domains[c] & ~bit) !== 0
     const nd = domains[c] & ~bit
     if (nd === 0) return false
     if (nd !== domains[c]) {
@@ -99,7 +102,7 @@ function applyConstraintProp(
 
   // Helper: intersect a cell's domain with a bitmask.
   function intersect(c: number, mask: number): boolean {
-    if (board[c] > 0) return true
+    if (board[c] > 0) return (domains[c] & mask) !== 0
     const nd = domains[c] & mask
     if (nd === 0) return false
     if (nd !== domains[c]) {
@@ -254,10 +257,67 @@ function applyConstraintProp(
     }
 
     case 'killer_cage': {
-      // Propagate no-repeat within cage (unique_group-like)
+      // No-repeat within cage
       for (const other of con.cells) {
         if (other === cell) continue
         if (!removeBit(other, bit)) return false
+      }
+      // Sum propagation: prune remaining cells based on needed sum and available digits
+      if (con.total !== undefined) {
+        let placedSum = 0
+        let usedBits = 0
+        const emptyCells: number[] = []
+        for (const c of con.cells) {
+          if (board[c] > 0) {
+            placedSum += board[c]
+            usedBits |= 1 << board[c]
+          } else {
+            emptyCells.push(c)
+          }
+        }
+        const remaining = con.total - placedSum
+        const k = emptyCells.length
+        if (k === 0) {
+          if (remaining !== 0) return false
+        } else if (k === 1) {
+          if (remaining < 1 || remaining > maxDigit) return false
+          if (!intersect(emptyCells[0], 1 << remaining)) return false
+        } else {
+          // Available digits = 1..maxDigit minus already placed in this cage
+          const availBits = (((1 << (maxDigit + 1)) - 1) & ~1) & ~usedBits
+          const avail: number[] = []
+          for (let d = 1; d <= maxDigit; d++) {
+            if (availBits & (1 << d)) avail.push(d)
+          }
+          if (avail.length < k) return false
+          // Global feasibility: min sum (k smallest avail) and max sum (k largest avail)
+          let minSum = 0, maxSum = 0
+          for (let i = 0; i < k; i++) minSum += avail[i]
+          for (let i = avail.length - k; i < avail.length; i++) maxSum += avail[i]
+          if (remaining < minSum || remaining > maxSum) return false
+          // Per-cell pruning: digit d is valid if (remaining-d) is achievable by k-1 others
+          for (const c of emptyCells) {
+            let newMask = 0
+            for (let d = 1; d <= maxDigit; d++) {
+              if (!(domains[c] & (1 << d))) continue
+              if (!(availBits & (1 << d))) continue
+              const need = remaining - d
+              // Min/max sum of (k-1) distinct digits from avail excluding d
+              let lo = 0, hi = 0, cnt = 0
+              for (let i = 0; i < avail.length && cnt < k - 1; i++) {
+                if (avail[i] !== d) { lo += avail[i]; cnt++ }
+              }
+              if (cnt < k - 1) continue
+              cnt = 0
+              for (let i = avail.length - 1; i >= 0 && cnt < k - 1; i--) {
+                if (avail[i] !== d) { hi += avail[i]; cnt++ }
+              }
+              if (need >= lo && need <= hi) newMask |= 1 << d
+            }
+            if (newMask === 0) return false
+            if (!intersect(c, newMask)) return false
+          }
+        }
       }
       break
     }
@@ -268,10 +328,81 @@ function applyConstraintProp(
         if (other === cell) continue
         if (!removeBit(other, bit)) return false
       }
+      // Range propagation: n cells must form n consecutive distinct values.
+      // The valid range for any unplaced cell is [maxPlaced-(n-1), minPlaced+(n-1)].
+      {
+        const n = con.cells.length
+        let minPlaced = digit, maxPlaced = digit
+        const unplaced: number[] = []
+        for (const c of con.cells) {
+          if (board[c] > 0) {
+            if (board[c] < minPlaced) minPlaced = board[c]
+            if (board[c] > maxPlaced) maxPlaced = board[c]
+          } else {
+            unplaced.push(c)
+          }
+        }
+        if (maxPlaced - minPlaced >= n) return false
+        let mask = 0
+        for (let d = Math.max(1, maxPlaced - n + 1); d <= Math.min(maxDigit, minPlaced + n - 1); d++) {
+          mask |= 1 << d
+        }
+        for (const c of unplaced) {
+          if (!intersect(c, mask)) return false
+        }
+      }
       break
     }
 
-    // arrow: too complex to propagate incrementally (check at completion)
+    case 'arrow': {
+      // Single-cell circle only: propagate sum constraint between circle and line cells
+      if (con.circle.length !== 1) break
+      const circleCell = con.circle[0]
+      const lineFlat: number[] = []
+      for (const l of con.lines) lineFlat.push(...l)
+      let lineSum = 0
+      const lineEmpty: number[] = []
+      for (const c of lineFlat) {
+        if (board[c] > 0) lineSum += board[c]
+        else lineEmpty.push(c)
+      }
+      if (lineEmpty.length === 0) {
+        // All line cells placed: force/validate circle
+        if (lineSum < 1 || lineSum > maxDigit) return false
+        if (!intersect(circleCell, 1 << lineSum)) return false
+      } else if (board[circleCell] > 0) {
+        // Circle known: constrain remaining line cells
+        const remaining = board[circleCell] - lineSum
+        const k = lineEmpty.length
+        if (remaining < k || remaining > k * maxDigit) return false
+        if (k === 1) {
+          if (!intersect(lineEmpty[0], 1 << remaining)) return false
+        } else {
+          // Arrow line cells may repeat, so min=k, max=k*maxDigit
+          for (const c of lineEmpty) {
+            const lo = remaining - (k - 1) * maxDigit
+            const hi = remaining - (k - 1)
+            let mask = 0
+            for (let d = Math.max(1, lo); d <= Math.min(maxDigit, hi); d++) mask |= 1 << d
+            if (mask === 0) return false
+            if (!intersect(c, mask)) return false
+          }
+        }
+      }
+      break
+    }
+
+    case 'antiknight': {
+      const row = Math.floor(cell / con.cols)
+      const col = cell % con.cols
+      for (const [dr, dc] of [[-2,-1],[-2,1],[-1,-2],[-1,2],[1,-2],[1,2],[2,-1],[2,1]] as const) {
+        const r = row + dr, c = col + dc
+        if (r >= 0 && r < con.rows && c >= 0 && c < con.cols) {
+          if (!removeBit(r * con.cols + c, bit)) return false
+        }
+      }
+      break
+    }
   }
 
   return true
@@ -373,7 +504,7 @@ function backtrack(
 
   nodesExplored++
   if (nodesExplored % PROGRESS_INTERVAL === 0) {
-    const msg: WorkerOutMessage = { type: 'progress', jobId: currentJobId, nodes: nodesExplored }
+    const msg: WorkerOutMessage = { type: 'progress', jobId: currentJobId, nodes: PROGRESS_INTERVAL }
     ;(self as unknown as DedicatedWorkerGlobalScope).postMessage(msg)
   }
 
@@ -430,6 +561,62 @@ function solveJob(job: SolverJob): number[] | null {
   }
 
   const cellConstraints = buildCellConstraints(N, constraints)
+
+  // Pre-solve: prune killer cage domains before any backtracking begins.
+  // This handles cages that have no fixed cells yet — purely sum+size reasoning.
+  for (const con of constraints) {
+    if (con.type !== 'killer_cage' || con.total === undefined) continue
+    let placedSum = 0, usedBits = 0
+    const emptyCells: number[] = []
+    for (const c of con.cells) {
+      if (board[c] > 0) {
+        placedSum += board[c]
+        usedBits |= 1 << board[c]
+      } else {
+        emptyCells.push(c)
+      }
+    }
+    const remaining = con.total - placedSum
+    const k = emptyCells.length
+    if (k === 0) { if (remaining !== 0) return null; continue }
+    const availBits = allBits & ~usedBits
+    const avail: number[] = []
+    for (let d = 1; d <= maxDigit; d++) if (availBits & (1 << d)) avail.push(d)
+    if (avail.length < k) return null
+    let minSum = 0, maxSum = 0
+    for (let i = 0; i < k; i++) minSum += avail[i]
+    for (let i = avail.length - k; i < avail.length; i++) maxSum += avail[i]
+    if (remaining < minSum || remaining > maxSum) return null
+    for (const c of emptyCells) {
+      let newMask = 0
+      for (let d = 1; d <= maxDigit; d++) {
+        if (!(domains[c] & (1 << d))) continue
+        if (!(availBits & (1 << d))) continue
+        const need = remaining - d
+        let lo = 0, hi = 0, cnt = 0
+        for (let i = 0; i < avail.length && cnt < k - 1; i++) {
+          if (avail[i] !== d) { lo += avail[i]; cnt++ }
+        }
+        if (cnt < k - 1) continue
+        cnt = 0
+        for (let i = avail.length - 1; i >= 0 && cnt < k - 1; i--) {
+          if (avail[i] !== d) { hi += avail[i]; cnt++ }
+        }
+        if (need >= lo && need <= hi) newMask |= 1 << d
+      }
+      if (newMask === 0) return null
+      const nd = domains[c] & newMask
+      if (nd === 0) return null
+      if (nd !== domains[c]) {
+        domains[c] = nd
+        if (popcount(nd) === 1) {
+          const forcedDigit = singletonBit(nd)
+          board[c] = forcedDigit
+          if (!propagate(board, domains, c, forcedDigit, constraints, cellConstraints, maxDigit)) return null
+        }
+      }
+    }
+  }
 
   // Propagate all fixed cells
   for (let i = 0; i < N; i++) {
