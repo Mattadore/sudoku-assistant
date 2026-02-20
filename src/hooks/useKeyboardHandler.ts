@@ -1,15 +1,14 @@
 import { useCallback, useEffect } from 'react'
-import { useGameStore } from '../stores/gameStore'
 import { useNetworkStore } from '../stores/networkStore'
+import { useUIStore } from '../stores/uiStore'
 import { stringIndex, splitIndex } from 'helper'
 import { useSelection } from './useSelection'
 
 export function useKeyboardHandler(
   selection: ReturnType<typeof useSelection>,
 ) {
-  const onlineId = useNetworkStore((s) => s.onlineId)
-  const undo = useGameStore((s) => s.undo)
-  const redo = useGameStore((s) => s.redo)
+  const networkUndo = useNetworkStore((s) => s.networkUndo)
+  const networkRedo = useNetworkStore((s) => s.networkRedo)
   const { select, selectCellsIf, mutateSelectedCells, toggleAnnotation } =
     selection
 
@@ -18,6 +17,18 @@ export function useKeyboardHandler(
       // Use getState() to avoid closing over rapidly-changing myUserdata
       const { selectorIndex } = useNetworkStore.getState().myUserdata
       if (selectorIndex === null) return
+
+      // Toggle conflict mode with plain "c" (no modifiers)
+      if (
+        event.key === 'c' &&
+        !event.shiftKey &&
+        !event.altKey &&
+        !event.ctrlKey &&
+        !event.metaKey
+      ) {
+        useUIStore.getState().toggleConflictMode()
+        return
+      }
 
       if (
         /^[1-9A-Za-z]$/.test(event.key) ||
@@ -48,26 +59,17 @@ export function useKeyboardHandler(
       }
 
       const [row, column] = splitIndex(selectorIndex)
-      const host = useNetworkStore.getState().host
       switch (event.key) {
         case 'y':
           if (event.ctrlKey) {
             event.preventDefault()
-            if (host) {
-              host.send({ traverseHistory: 1 })
-            } else {
-              redo(onlineId)
-            }
+            networkRedo()
           }
           break
         case 'z':
           if (event.ctrlKey) {
             event.preventDefault()
-            if (host) {
-              host.send({ traverseHistory: -1 })
-            } else {
-              undo(onlineId)
-            }
+            networkUndo()
           }
           break
         case 'a':
@@ -92,7 +94,7 @@ export function useKeyboardHandler(
         case 'Delete':
           if (event.ctrlKey) {
             mutateSelectedCells((cell) => {
-              if (cell.color) cell.color = null
+              if (cell.color.length > 0) cell.color = []
             })
           } else {
             mutateSelectedCells((cell) => {
@@ -109,9 +111,8 @@ export function useKeyboardHandler(
       }
     },
     [
-      onlineId,
-      undo,
-      redo,
+      networkUndo,
+      networkRedo,
       select,
       selectCellsIf,
       mutateSelectedCells,

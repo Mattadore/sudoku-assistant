@@ -56,7 +56,8 @@ function createEmptyBoard(rows: number, cols: number): BoardState {
         center: { numbers: [], letters: [] },
         topLeftCorner: { numbers: [], letters: [] },
         bottomRightCorner: { numbers: [], letters: [] },
-        color: null,
+        color: [],
+        fixed: false,
       })
     }
   }

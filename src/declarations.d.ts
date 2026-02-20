@@ -13,7 +13,8 @@ interface CellData {
   center: AnnotationData
   topLeftCorner: AnnotationData
   bottomRightCorner: AnnotationData
-  color: string | null
+  color: string[]
+  fixed: boolean
 }
 
 type BoardIndex = [row: number, column: number]

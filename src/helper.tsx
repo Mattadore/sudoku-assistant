@@ -178,3 +178,12 @@ export const createMerge = <T extends Object>(obj: T, diff: Diff<T>) => {
     inplaceMerge(draft as T, diff)
   })
 }
+
+export function extensionColor(name: string): string {
+  let hash = 0
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash)
+    hash |= 0
+  }
+  return `hsl(${Math.abs(hash) % 360}, 70%, 50%)`
+}

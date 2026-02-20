@@ -27,7 +27,8 @@
     "@types/react-color": "^3.0.6",
     "@types/react-dom": "^18.2.1",
     "prettier": "^2.8.8",
-    "typescript": "^5.0.4"
+    "typescript": "^5.0.4",
+    "vitest": "1.6.0"
   },
   "keywords": [
     "sudoku",
@@ -36,9 +37,11 @@
   ],
   "license": "MIT",
   "scripts": {
-    "dev": "next dev -p 8081",
+    "dev": "next dev -p 8080",
     "build": "next build",
     "start": "next start -p 8080",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "format": "prettier --parser typescript --trailing-comma es5 --no-semi --single-quote --write \"src/**/*.ts*\""
   },
   "contributors": [

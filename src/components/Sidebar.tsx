@@ -11,27 +11,59 @@ import {
   Button,
   Chip,
   Drawer,
+  IconButton,
+  List,
+  ListItem,
+  ListItemText,
+  Switch,
   TextField,
   Typography,
 } from '@mui/material'
-import { ArrowForwardIosSharp } from '@mui/icons-material'
-import { useGameStore, GameState } from '../stores/gameStore'
+import {
+  ArrowForwardIosSharp,
+  ChevronLeft,
+  ChevronRight,
+} from '@mui/icons-material'
+import { useGameStore, type GameState } from '../stores/gameStore'
 import { useNetworkStore } from '../stores/networkStore'
 import { useExtensionStore } from '../stores/extensionStore'
-import { splitIndex } from 'helper'
+import { splitIndex, extensionColor } from 'helper'
+import { useUIStore } from '../stores/uiStore'
 import { importFPuzzle } from '../puzzle/import'
 
 const SIDEBAR_WIDTH = 350
 
 const colorPickerColors = [
-  '#ffffff', '#b5b5b5', '#FCDC00', '#DBDF00', '#A4DD00',
-  '#68CCCA', '#73D8FF', '#AEA1FF', '#FDA1FF', '#f55f73',
-  '#d8e6f7', '#fce4cf',
-  '#333333', '#808080', '#FCC400', '#B0BC00', '#68BC00',
-  '#16A5A5', '#009CE0', '#7B64FF', '#FA28FF',
-  '#000000', '#ef9173', '#ff0000', '#ff4d00', '#FB9E00',
-  '#68BC00', '#00fb1d', '#30C18A', '#16A5A5', '#009CE0',
-  '#7B64FF', '#AB149E',
+  '#ffffff',
+  '#b5b5b5',
+  '#DBDF00',
+  '#A4DD00',
+  '#68CCCA',
+  '#73D8FF',
+  '#AEA1FF',
+  '#FDA1FF',
+  '#f55f73',
+  '#d8e6f7',
+  '#fce4cf',
+  '#333333',
+  '#808080',
+  '#FCC400',
+  '#B0BC00',
+  '#000000',
+  '#ef9173',
+  '#ff0000',
+  '#ff4d00',
+  '#FB9E00',
+  '#68BC00',
+  '#00fb1d',
+  '#30C18A',
+  '#16A5A5',
+  '#009CE0',
+  '#6144E5',
+  '#7B64FF',
+  '#AB149E',
+  '#FA28FF',
+  '#E91E63',
 ]
 
 // Styled accordion components
@@ -67,10 +99,12 @@ const ImportSection: React.FC = () => {
   const [importText, setImportText] = React.useState('')
   const [importError, setImportError] = React.useState<string | null>(null)
   const [importSuccess, setImportSuccess] = React.useState<string | null>(null)
+  const [importRuleset, setImportRuleset] = React.useState<string | null>(null)
 
   const handleImport = () => {
     setImportError(null)
     setImportSuccess(null)
+    setImportRuleset(null)
     try {
       const puzzle = importFPuzzle(importText.trim())
       setImportSuccess(
@@ -78,6 +112,7 @@ const ImportSection: React.FC = () => {
           ? `Loaded "${puzzle.metadata.title}"`
           : 'Puzzle loaded',
       )
+      if (puzzle.metadata.ruleset) setImportRuleset(puzzle.metadata.ruleset)
       setImportText('')
     } catch (e: any) {
       setImportError(e.message || 'Failed to import puzzle')
@@ -99,7 +134,9 @@ const ImportSection: React.FC = () => {
           placeholder="Paste f-puzzles URL or base64..."
           value={importText}
           onChange={(e) => setImportText(e.target.value)}
-          sx={{ '& .MuiInputBase-input': { fontFamily: 'monospace', fontSize: 12 } }}
+          sx={{
+            '& .MuiInputBase-input': { fontFamily: 'monospace', fontSize: 12 },
+          }}
         />
         <Button
           variant="contained"
@@ -112,13 +149,35 @@ const ImportSection: React.FC = () => {
           Import
         </Button>
         {importError && (
-          <Typography color="error" variant="caption" sx={{ mt: 0.5, display: 'block' }}>
+          <Typography
+            color="error"
+            variant="caption"
+            sx={{ mt: 0.5, display: 'block' }}
+          >
             {importError}
           </Typography>
         )}
         {importSuccess && (
-          <Typography color="success.main" variant="caption" sx={{ mt: 0.5, display: 'block' }}>
+          <Typography
+            color="success.main"
+            variant="caption"
+            sx={{ mt: 0.5, display: 'block' }}
+          >
             {importSuccess}
+          </Typography>
+        )}
+        {importRuleset && (
+          <Typography
+            variant="caption"
+            sx={{
+              mt: 0.5,
+              display: 'block',
+              whiteSpace: 'pre-wrap',
+              color: 'text.secondary',
+              fontSize: 11,
+            }}
+          >
+            {importRuleset}
           </Typography>
         )}
       </AccordionDetails>
@@ -131,12 +190,11 @@ const ColorSection: React.FC = () => {
   const myColor = useNetworkStore((s) => s.myUserdata.color)
   const selectedIndices = useNetworkStore((s) => s.myUserdata.selectedIndices)
   const updateUserdata = useNetworkStore((s) => s.updateUserdata)
-  const onlineId = useNetworkStore((s) => s.onlineId)
   const pickingMe = useNetworkStore((s) => s.pickingMe)
   const setPickingMe = useNetworkStore((s) => s.setPickingMe)
   const selectedColor = useNetworkStore((s) => s.selectedColor)
   const setSelectedColor = useNetworkStore((s) => s.setSelectedColor)
-  const dispatch = useGameStore((s) => s.dispatch)
+  const networkDispatch = useNetworkStore((s) => s.networkDispatch)
 
   return (
     <Section>
@@ -154,12 +212,18 @@ const ColorSection: React.FC = () => {
               localStorage.color = color.hex
             } else {
               setSelectedColor(color.hex)
-              dispatch((draft: GameState) => {
+              networkDispatch((draft: GameState) => {
                 for (const selected of selectedIndices) {
                   const [row, column] = splitIndex(selected)
-                  draft.boardState[row][column].color = color.hex
+                  const cell = draft.boardState[row][column]
+                  const idx = cell.color.indexOf(color.hex)
+                  if (idx >= 0) {
+                    cell.color.splice(idx, 1)
+                  } else {
+                    cell.color.push(color.hex)
+                  }
                 }
-              }, onlineId)
+              })
             }
           }}
         />
@@ -219,17 +283,15 @@ const MultiplayerSection: React.FC = () => {
   const setHostIdText = useNetworkStore((s) => s.setHostIdText)
   const joinGame = useNetworkStore((s) => s.joinGame)
 
-  const connectionStatus = clients.size > 0
-    ? 'HOST'
-    : host != null
-    ? 'CLIENT'
-    : 'OFFLINE'
+  const connectionStatus =
+    clients.size > 0 ? 'HOST' : host != null ? 'CLIENT' : 'OFFLINE'
 
-  const statusColor = connectionStatus === 'OFFLINE'
-    ? 'default'
-    : connectionStatus === 'HOST'
-    ? 'primary'
-    : 'secondary'
+  const statusColor =
+    connectionStatus === 'OFFLINE'
+      ? 'default'
+      : connectionStatus === 'HOST'
+      ? 'primary'
+      : 'secondary'
 
   return (
     <Section>
@@ -284,23 +346,72 @@ const MultiplayerSection: React.FC = () => {
 // --- Extensions Section ---
 const ExtensionsSection: React.FC = () => {
   const extensions = useExtensionStore((s) => s.extensions)
-  const controls = Object.values(extensions)
-    .filter((ext) => ext.getSidebarControls)
-    .map((ext) => (
-      <React.Fragment key={ext.extensionName}>
-        {ext.getSidebarControls!()}
-      </React.Fragment>
-    ))
+  const disabledExtensions = useUIStore((s) => s.disabledExtensions)
+  const toggleExtensionEnabled = useUIStore((s) => s.toggleExtensionEnabled)
 
-  if (controls.length === 0) return null
+  const extList = Object.values(extensions)
+  if (extList.length === 0) return null
+
+  const handleToggle = (name: string) => {
+    toggleExtensionEnabled(name)
+    // Recompute conflicts for all cells after toggling
+    const boardState = useGameStore.getState().gameState.boardState
+    const allIndices: string[] = []
+    for (let r = 0; r < boardState.length; r++) {
+      for (let c = 0; c < boardState[0].length; c++) {
+        allIndices.push(`${r},${c}`)
+      }
+    }
+    // Use setTimeout so the uiStore update is committed first
+    setTimeout(() => {
+      useExtensionStore.getState().updateConflicts(boardState, allIndices)
+    }, 0)
+  }
 
   return (
     <Section>
       <SectionHeader>
         <Typography variant="subtitle2">Extensions</Typography>
       </SectionHeader>
-      <AccordionDetails sx={{ pt: 1.5, pb: 1.5 }}>
-        {controls}
+      <AccordionDetails sx={{ pt: 0, pb: 1 }}>
+        <List dense disablePadding>
+          {extList.map((ext) => {
+            const disabled = disabledExtensions.has(ext.extensionName)
+            const color = extensionColor(ext.extensionName)
+            return (
+              <ListItem key={ext.extensionName} disableGutters sx={{ py: 0 }}>
+                <ListItemText
+                  primary={ext.extensionName}
+                  primaryTypographyProps={{
+                    variant: 'body2',
+                    sx: {
+                      color: disabled ? 'text.disabled' : color,
+                      fontWeight: 500,
+                      textTransform: 'capitalize',
+                    },
+                  }}
+                />
+                <Switch
+                  edge="end"
+                  size="small"
+                  checked={!disabled}
+                  onChange={() => handleToggle(ext.extensionName)}
+                />
+              </ListItem>
+            )
+          })}
+        </List>
+        {extList
+          .filter(
+            (ext) =>
+              ext.getSidebarControls &&
+              !disabledExtensions.has(ext.extensionName),
+          )
+          .map((ext) => (
+            <React.Fragment key={ext.extensionName}>
+              {ext.getSidebarControls!()}
+            </React.Fragment>
+          ))}
       </AccordionDetails>
     </Section>
   )
@@ -337,24 +448,50 @@ const NotesSection: React.FC = () => {
 }
 
 // --- Main Sidebar ---
-export const Sidebar: React.FC = () => (
-  <Drawer
-    sx={{
-      width: SIDEBAR_WIDTH,
-      flexShrink: 0,
-      '& .MuiDrawer-paper': {
-        width: SIDEBAR_WIDTH,
-        boxSizing: 'border-box',
-      },
-    }}
-    variant="permanent"
-    anchor="right"
-  >
-    <ImportSection />
-    <ColorSection />
-    <FileSection />
-    <MultiplayerSection />
-    <ExtensionsSection />
-    <NotesSection />
-  </Drawer>
-)
+export const Sidebar: React.FC = () => {
+  const visible = useUIStore((s) => s.sidebarVisible)
+  const toggle = useUIStore((s) => s.toggleSidebar)
+
+  return (
+    <>
+      <IconButton
+        onClick={toggle}
+        sx={{
+          position: 'fixed',
+          top: 8,
+          right: visible ? SIDEBAR_WIDTH + 4 : 4,
+          zIndex: 1300,
+          transition: 'right 0.25s ease',
+          bgcolor: 'background.paper',
+          boxShadow: 1,
+          '&:hover': { bgcolor: 'grey.200' },
+        }}
+        size="small"
+      >
+        {visible ? <ChevronRight /> : <ChevronLeft />}
+      </IconButton>
+      <Drawer
+        sx={{
+          width: visible ? SIDEBAR_WIDTH : 0,
+          flexShrink: 0,
+          transition: 'width 0.25s ease',
+          '& .MuiDrawer-paper': {
+            width: SIDEBAR_WIDTH,
+            boxSizing: 'border-box',
+            transform: visible ? 'none' : `translateX(${SIDEBAR_WIDTH}px)`,
+            transition: 'transform 0.25s ease',
+          },
+        }}
+        variant="permanent"
+        anchor="right"
+      >
+        <ImportSection />
+        <ColorSection />
+        <FileSection />
+        <MultiplayerSection />
+        <ExtensionsSection />
+        <NotesSection />
+      </Drawer>
+    </>
+  )
+}

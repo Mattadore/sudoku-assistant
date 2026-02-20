@@ -1,5 +1,6 @@
 import { create } from 'zustand'
 import { addConflicts, removeConflicts } from 'helper'
+import { useUIStore } from './uiStore'
 
 interface ExtensionStore {
   extensions: { [key: string]: SolverExtension }
@@ -66,6 +67,7 @@ export const useExtensionStore = create<ExtensionStore>()((set, get) => ({
       const [row, column] = index.split(',').map((i) => parseInt(i))
       const boardIndex: BoardIndex = [row, column]
       touched.add(index)
+      const { disabledExtensions } = useUIStore.getState()
       for (const extensionName in extensions) {
         const extension = extensions[extensionName]
         if (extension.isRelevant && !extension.isRelevant(boardIndex)) continue
@@ -74,8 +76,10 @@ export const useExtensionStore = create<ExtensionStore>()((set, get) => ({
         if (deps) {
           for (const depIndex of Object.keys(deps)) touched.add(depIndex)
         }
-        const conflictList = extension.getCellConflicts(board, boardIndex)
         removeConflicts(conflictMatrix, boardIndex, extensionName)
+        // Only recompute conflicts for enabled extensions
+        if (disabledExtensions.has(extensionName)) continue
+        const conflictList = extension.getCellConflicts(board, boardIndex)
         addConflicts(conflictMatrix, boardIndex, conflictList, extensionName)
         // Track cells in new conflicts (were modified by addConflicts)
         for (const conflict of conflictList) {

@@ -1,15 +1,15 @@
 import { useCallback } from 'react'
-import { useGameStore, GameState } from '../stores/gameStore'
+import { useGameStore } from '../stores/gameStore'
 import { useNetworkStore } from '../stores/networkStore'
 import { stringIndex, splitIndex } from 'helper'
+import type { GameState } from '../stores/gameStore'
 
 // All callbacks use getState() internally to avoid closing over rapidly-changing
 // state (gameState, myUserdata). This keeps the callbacks stable and prevents
 // Board from re-rendering on every cell change.
 export function useSelection() {
-  const dispatch = useGameStore((s) => s.dispatch)
+  const networkDispatch = useNetworkStore((s) => s.networkDispatch)
   const updateUserdata = useNetworkStore((s) => s.updateUserdata)
-  const onlineId = useNetworkStore((s) => s.onlineId)
 
   const selectCellsIf = useCallback(
     (test: (cell: CellData) => boolean) => {
@@ -30,14 +30,22 @@ export function useSelection() {
   const mutateSelectedCells = useCallback(
     (update: (cell: CellData) => void) => {
       const { selectedIndices } = useNetworkStore.getState().myUserdata
-      dispatch((draft: GameState) => {
+      networkDispatch((draft: GameState) => {
         for (const selected of selectedIndices) {
           const [row, column] = splitIndex(selected)
+          // If the cell is fixed, only fix the number and just reset it on update
+          let priorNum = null
+          if (draft.boardState[row][column].fixed) {
+            priorNum = draft.boardState[row][column].number
+          }
           update(draft.boardState[row][column])
+          if (priorNum) {
+            draft.boardState[row][column].number = priorNum
+          }
         }
-      }, onlineId)
+      })
     },
-    [dispatch, onlineId],
+    [networkDispatch],
   )
 
   const toggleAnnotation = useCallback(

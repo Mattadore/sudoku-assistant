@@ -1,11 +1,18 @@
 import * as React from 'react'
-import { useEffect } from 'react'
+import { useEffect, useMemo } from 'react' // useMemo used by ConflictArrowOverlay
 import emoStyled from '@emotion/styled'
 import { styled } from '@mui/material/styles'
-import { Box, Container } from '@mui/material'
+import { Box, Chip, Container } from '@mui/material' // Chip used for conflict mode indicator
 import { useGameStore } from '../stores/gameStore'
 import { useNetworkStore } from '../stores/networkStore'
 import { useExtensionStore } from '../stores/extensionStore'
+import { useUIStore } from '../stores/uiStore'
+import { splitIndex, extensionColor } from 'helper'
+import {
+  cellCenter,
+  gridViewBox,
+  overlayStyle,
+} from '../solver-extensions/svgHelpers'
 import { GridCell } from './GridCell'
 import { useSelection } from '../hooks/useSelection'
 import { useKeyboardHandler } from '../hooks/useKeyboardHandler'
@@ -108,14 +115,113 @@ for (let row = 0; row < 9; row++) {
 const ExtensionOverlays: React.FC = React.memo(() => {
   const extensions = useExtensionStore((s) => s.extensions)
   const boardState = useGameStore((s) => s.gameState.boardState)
+  const disabledExtensions = useUIStore((s) => s.disabledExtensions)
   const overlays = Object.values(extensions)
-    .filter((ext) => ext.getBoardOverlay)
+    .filter(
+      (ext) => ext.getBoardOverlay && !disabledExtensions.has(ext.extensionName),
+    )
     .map((ext) => (
       <React.Fragment key={ext.extensionName}>
         {ext.getBoardOverlay!(boardState, CELL_SIZE)}
       </React.Fragment>
     ))
   return overlays.length > 0 ? <>{overlays}</> : null
+})
+
+const ConflictArrowOverlay: React.FC = React.memo(() => {
+  const conflictMode = useUIStore((s) => s.conflictMode)
+  const selectorIndex = useNetworkStore((s) => s.myUserdata.selectorIndex)
+
+  const cellNumber = useGameStore((s) => {
+    if (!selectorIndex) return null
+    const [r, c] = splitIndex(selectorIndex)
+    return s.gameState.boardState[r]?.[c]?.number ?? null
+  })
+
+  const conflictData = useExtensionStore((s) => {
+    if (!selectorIndex) return null
+    const [r, c] = splitIndex(selectorIndex)
+    return s.conflictMatrix[r]?.[c] ?? null
+  })
+
+  const arrows = useMemo(() => {
+    if (!conflictMode || !selectorIndex || !cellNumber || !conflictData)
+      return []
+    const entries = conflictData.conflicts[cellNumber - 1]
+    if (!entries || entries.length === 0) return []
+    const [srcRow, srcCol] = splitIndex(selectorIndex)
+    const src = cellCenter(srcRow, srcCol, CELL_SIZE)
+    return entries
+      .filter(([r, c]) => `${r},${c}` !== selectorIndex)
+      .map(([r, c, ext]) => {
+        const dst = cellCenter(r, c, CELL_SIZE)
+        const dx = dst.x - src.x
+        const dy = dst.y - src.y
+        const len = Math.sqrt(dx * dx + dy * dy)
+        if (len === 0) return null
+        const shorten = CELL_SIZE * 0.35
+        const nx = dx / len
+        const ny = dy / len
+        return {
+          x1: src.x + nx * shorten,
+          y1: src.y + ny * shorten,
+          x2: dst.x - nx * shorten,
+          y2: dst.y - ny * shorten,
+          ext,
+          key: `${r},${c},${ext}`,
+        }
+      })
+      .filter(Boolean) as {
+      x1: number
+      y1: number
+      x2: number
+      y2: number
+      ext: string
+      key: string
+    }[]
+  }, [conflictMode, selectorIndex, cellNumber, conflictData])
+
+  if (arrows.length === 0) return null
+
+  // Collect unique extension names for marker defs
+  const extNames = [...new Set(arrows.map((a) => a.ext))]
+
+  return (
+    <svg
+      viewBox={gridViewBox(CELL_SIZE)}
+      style={{ ...overlayStyle(), zIndex: 600 }}
+    >
+      <defs>
+        {extNames.map((name) => (
+          <marker
+            key={name}
+            id={`conflict-arrow-${name}`}
+            viewBox="0 0 10 10"
+            refX="8"
+            refY="5"
+            markerWidth="6"
+            markerHeight="6"
+            orient="auto-start-reverse"
+          >
+            <path d="M 0 0 L 10 5 L 0 10 z" fill={extensionColor(name)} />
+          </marker>
+        ))}
+      </defs>
+      {arrows.map((a) => (
+        <line
+          key={a.key}
+          x1={a.x1}
+          y1={a.y1}
+          x2={a.x2}
+          y2={a.y2}
+          stroke={extensionColor(a.ext)}
+          strokeWidth={3}
+          strokeLinecap="round"
+          markerEnd={`url(#conflict-arrow-${a.ext})`}
+        />
+      ))}
+    </svg>
+  )
 })
 
 export const Board: React.FC = () => {
@@ -125,6 +231,50 @@ export const Board: React.FC = () => {
   const { select } = selection
 
   useKeyboardHandler(selection)
+
+  // Compute conflict highlights when selector changes
+  const selectorIndex = useNetworkStore((s) => s.myUserdata.selectorIndex)
+  useEffect(() => {
+    if (!selectorIndex) {
+      useUIStore.getState().setConflictHighlights([])
+      return
+    }
+    const [row, col] = splitIndex(selectorIndex)
+    const cellData = useGameStore.getState().gameState.boardState[row]?.[col]
+    const conflictData =
+      useExtensionStore.getState().conflictMatrix[row]?.[col]
+    if (!conflictData || !cellData?.number) {
+      useUIStore.getState().setConflictHighlights([])
+      return
+    }
+    const conflicting = conflictData.conflicts[cellData.number - 1]
+    const indices = conflicting
+      .map(([r, c]) => `${r},${c}`)
+      .filter((idx) => idx !== selectorIndex)
+    useUIStore.getState().setConflictHighlights(indices)
+  }, [selectorIndex])
+
+  // Also recompute when board state changes at the selected cell
+  const selectedCellNumber = useGameStore((s) => {
+    if (!selectorIndex) return null
+    const [row, col] = splitIndex(selectorIndex)
+    return s.gameState.boardState[row]?.[col]?.number ?? null
+  })
+  useEffect(() => {
+    if (!selectorIndex || !selectedCellNumber) {
+      useUIStore.getState().setConflictHighlights([])
+      return
+    }
+    const [row, col] = splitIndex(selectorIndex)
+    const conflictData =
+      useExtensionStore.getState().conflictMatrix[row]?.[col]
+    if (!conflictData) return
+    const conflicting = conflictData.conflicts[selectedCellNumber - 1]
+    const indices = conflicting
+      .map(([r, c]) => `${r},${c}`)
+      .filter((idx) => idx !== selectorIndex)
+    useUIStore.getState().setConflictHighlights(indices)
+  }, [selectorIndex, selectedCellNumber])
 
   // Deselect keyboard focus when clicking outside the grid
   useEffect(() => {
@@ -136,6 +286,8 @@ export const Board: React.FC = () => {
     return () => window.removeEventListener('mousedown', pageClicked)
   }, [])
 
+  const conflictMode = useUIStore((s) => s.conflictMode)
+
   return (
     <Container>
       <GridContainer>
@@ -146,6 +298,7 @@ export const Board: React.FC = () => {
         >
           <ImageCanvases image={image} />
           <ExtensionOverlays />
+          <ConflictArrowOverlay />
           <SudokuGrid style={{ padding: imageLoaded ? '1px' : '2px' }}>
             {GRID_INDICES.map(([row, column]) => (
               <GridCell
@@ -158,6 +311,14 @@ export const Board: React.FC = () => {
             ))}
           </SudokuGrid>
         </GridBackground>
+        {conflictMode && (
+          <Chip
+            label="Conflict Mode"
+            size="small"
+            color="warning"
+            sx={{ position: 'absolute', bottom: 12, left: 12 }}
+          />
+        )}
       </GridContainer>
     </Container>
   )

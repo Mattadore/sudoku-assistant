@@ -1,7 +1,8 @@
 import { create } from 'zustand'
 import type { Peer, DataConnection } from 'peerjs'
+import type { Patch } from 'immer'
 import { createMerge, inplaceMerge, splitIndex, preprocessImage } from 'helper'
-import { useGameStore } from './gameStore'
+import { useGameStore, GameState } from './gameStore'
 
 const isBrowser = typeof window !== 'undefined'
 
@@ -25,6 +26,7 @@ type HostToClientData = {
 type ClientToHostData = {
   userdataDiff?: Diff<Userdata>
   boardupdate?: { [key: string]: CellDiff }
+  patches?: Patch[]
   traverseHistory?: number
 }
 
@@ -50,6 +52,9 @@ interface NetworkStore {
   currentFileType: string | null
 
   // Actions
+  networkDispatch: (mutator: (draft: GameState) => void) => void
+  networkUndo: () => void
+  networkRedo: () => void
   initializePeer: () => Promise<void>
   joinGame: (hostId: string) => void
   disconnect: () => void
@@ -79,13 +84,15 @@ export const useNetworkStore = create<NetworkStore>()((set, get) => {
   const handleClientData = (peerId: string, data: ClientToHostData) => {
     if (!data || Object.keys(data).length === 0) return
 
+    let clientUpdate : HostToClientData = {}
+
     if (data.userdataDiff !== undefined) {
       set((state) => ({
         multiUserdata: createMerge(state.multiUserdata, {
           [peerId]: data.userdataDiff,
         }),
       }))
-      sendToClients({ userdataMap: { [peerId]: data.userdataDiff } })
+      clientUpdate.userdataMap = { [peerId]: data.userdataDiff }
     }
 
     if (data.boardupdate !== undefined) {
@@ -96,8 +103,13 @@ export const useNetworkStore = create<NetworkStore>()((set, get) => {
           inplaceMerge(draft.boardState[row][column], data.boardupdate[index])
         }
       }, peerId)
-      // Send updated state to all clients
-      sendToClients({ state: useGameStore.getState().gameState.boardState })
+      clientUpdate.state = useGameStore.getState().gameState.boardState
+    }
+
+    if (data.patches !== undefined) {
+      const gameStore = useGameStore.getState()
+      gameStore.applyRemotePatches(data.patches, peerId)
+      clientUpdate.state = useGameStore.getState().gameState.boardState
     }
 
     if (data.traverseHistory !== undefined) {
@@ -107,7 +119,10 @@ export const useNetworkStore = create<NetworkStore>()((set, get) => {
       } else {
         gameStore.redo(peerId)
       }
-      sendToClients({ state: useGameStore.getState().gameState.boardState })
+      clientUpdate.state = useGameStore.getState().gameState.boardState
+    }
+    if (clientUpdate.state || clientUpdate.userdataMap) {
+      sendToClients(clientUpdate)
     }
   }
 
@@ -199,6 +214,58 @@ export const useNetworkStore = create<NetworkStore>()((set, get) => {
     },
     currentFile: null,
     currentFileType: null,
+
+    networkDispatch: (mutator) => {
+      const { host, clients, onlineId } = get()
+      const gameStore = useGameStore.getState()
+
+      if (host) {
+        // Client: dispatch locally for instant feedback, send patches to host
+        const patches = gameStore.dispatch(mutator, onlineId)
+        if (patches.length > 0) {
+          sendToHost({ patches })
+        }
+      } else {
+        // Host or standalone: dispatch locally
+        const patches = gameStore.dispatch(mutator, onlineId)
+        if (patches.length > 0 && clients.size > 0) {
+          // Host: broadcast updated state to all clients
+          sendToClients({
+            state: useGameStore.getState().gameState.boardState,
+          })
+        }
+      }
+    },
+
+    networkUndo: () => {
+      const { host, clients, onlineId } = get()
+      if (host) {
+        // Client: delegate to host
+        sendToHost({ traverseHistory: -1 })
+      } else {
+        useGameStore.getState().undo(onlineId)
+        if (clients.size > 0) {
+          sendToClients({
+            state: useGameStore.getState().gameState.boardState,
+          })
+        }
+      }
+    },
+
+    networkRedo: () => {
+      const { host, clients, onlineId } = get()
+      if (host) {
+        // Client: delegate to host
+        sendToHost({ traverseHistory: 1 })
+      } else {
+        useGameStore.getState().redo(onlineId)
+        if (clients.size > 0) {
+          sendToClients({
+            state: useGameStore.getState().gameState.boardState,
+          })
+        }
+      }
+    },
 
     initializePeer: async () => {
       if (get().peer) return

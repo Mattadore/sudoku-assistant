@@ -22,7 +22,7 @@ export default class Sudoku implements SolverExtension {
       for (let innerCol = 0; innerCol < 3; ++innerCol) {
         const row = boxrow * 3 + innerRow
         const col = boxcol * 3 + innerCol
-        if (row == index[0] && col == index[1]) continue
+        if (row == index[0] || col == index[1]) continue
         conflicts.push([row, col, num])
       }
     }

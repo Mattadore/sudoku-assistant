@@ -54,40 +54,21 @@ export default class Thermometer implements SolverExtension {
   getBoardOverlay = (_board: BoardState, cellSize: number): any => {
     if (this.data.length === 0) return null
 
-    const gap = 3 // grid gap in px (matches box gap)
-    const cellGap = 1
-
-    // Convert cell index to pixel center
-    const cellCenter = (row: number, col: number) => {
-      const boxGapsX = Math.floor(col / 3) * (gap - cellGap)
-      const boxGapsY = Math.floor(row / 3) * (gap - cellGap)
-      const x = col * (cellSize + cellGap) + cellSize / 2 + boxGapsX + gap
-      const y = row * (cellSize + cellGap) + cellSize / 2 + boxGapsY + gap
-      return { x, y }
-    }
-
+    const { cellCenter, gridViewBox, overlayStyle } = require('./svgHelpers')
+    const cc = (r: number, c: number) => cellCenter(r, c, cellSize)
     const bulbRadius = cellSize * 0.3
     const lineWidth = cellSize * 0.2
 
     return (
-      <svg
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          width: '100%',
-          height: '100%',
-          pointerEvents: 'none',
-          zIndex: 100,
-        }}
-      >
+      <svg style={overlayStyle()} viewBox={gridViewBox(cellSize)}>
+
         {this.data.map((thermo, i) => {
           if (thermo.length === 0) return null
           const [bulbRow, bulbCol] = thermo[0]
-          const bulb = cellCenter(bulbRow, bulbCol)
+          const bulb = cc(bulbRow, bulbCol)
           const points = thermo
             .map(([r, c]) => {
-              const { x, y } = cellCenter(r, c)
+              const { x, y } = cc(r, c)
               return `${x},${y}`
             })
             .join(' ')
@@ -101,14 +82,14 @@ export default class Thermometer implements SolverExtension {
                 strokeWidth={lineWidth}
                 strokeLinecap="round"
                 strokeLinejoin="round"
-                opacity={0.6}
+                opacity={1}
               />
               <circle
                 cx={bulb.x}
                 cy={bulb.y}
                 r={bulbRadius}
                 fill="#AAAAAA"
-                opacity={0.6}
+                opacity={1}
               />
             </g>
           )
