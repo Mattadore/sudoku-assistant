@@ -1,6 +1,7 @@
 import { useGameStore, computeDefaultRegions } from '../stores/gameStore'
 import { useExtensionStore } from '../stores/extensionStore'
 import { useUIStore } from '../stores/uiStore'
+import { useNetworkStore } from '../stores/networkStore'
 import Sudoku from '../solver-extensions/Sudoku'
 import Thermometer from '../solver-extensions/Thermometer'
 import KillerCage from '../solver-extensions/KillerCage'
@@ -98,6 +99,12 @@ export function loadPuzzle(puzzle: PuzzleDefinition) {
   ui.setConflictsEnabled(puzzle.settings?.conflictsEnabled ?? true)
   ui.resetTimer()
   ui.startTimer()
+
+  // Retain the puzzle definition in the network store so a host transmits it to
+  // joining clients (handleConnection only sends payload.puzzle when currentPuzzle
+  // is set). Without this, clients receive board state with no grid/constraints
+  // and render a blank board. setPuzzle also re-broadcasts to any connected clients.
+  useNetworkStore.getState().setPuzzle(puzzle)
 }
 
 /**

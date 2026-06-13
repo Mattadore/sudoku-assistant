@@ -3,6 +3,20 @@ import { useGameStore } from '../stores/gameStore'
 import { useNetworkStore } from '../stores/networkStore'
 import { useExtensionStore } from '../stores/extensionStore'
 import Sudoku from '../solver-extensions/Sudoku'
+import { loadPuzzle } from '../puzzle/import'
+
+function makePuzzle(size = 9): any {
+  return {
+    metadata: { title: 'Regression Puzzle', source: 'internal' },
+    grid: {
+      size,
+      cells: Array.from({ length: size }, () =>
+        Array.from({ length: size }, () => ({})),
+      ),
+    },
+    constraints: [],
+  }
+}
 
 describe('networkStore', () => {
   beforeEach(() => {
@@ -143,6 +157,34 @@ describe('networkStore', () => {
 
       useNetworkStore.getState().networkRedo()
       expect(mockSend).toHaveBeenCalledWith({ traverseHistory: 1 })
+    })
+  })
+
+  describe('puzzle transmission to joining clients (regression)', () => {
+    it('loadPuzzle populates currentPuzzle so the host can transmit it', () => {
+      // Bug: loadPuzzle updated only the game store, leaving currentPuzzle null,
+      // so handleConnection (if currentPuzzle) never sent the puzzle and clients
+      // rendered a blank board.
+      expect(useNetworkStore.getState().currentPuzzle).toBeNull()
+      const puzzle = makePuzzle()
+      loadPuzzle(puzzle)
+      expect(useNetworkStore.getState().currentPuzzle).toBe(puzzle)
+    })
+
+    it('loading a puzzle broadcasts the puzzle to already-connected clients', () => {
+      const mockSend = vi.fn()
+      const mockClient = { send: mockSend } as any
+      useNetworkStore.setState({
+        clients: new Map([['client1', mockClient]]),
+      })
+
+      const puzzle = makePuzzle()
+      loadPuzzle(puzzle)
+
+      const puzzlePayload = mockSend.mock.calls.find((c) => c[0]?.puzzle)
+      expect(puzzlePayload).toBeDefined()
+      expect(puzzlePayload![0].puzzle).toBe(puzzle)
+      expect(puzzlePayload![0].state).toBeDefined()
     })
   })
 
