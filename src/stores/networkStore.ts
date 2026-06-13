@@ -3,6 +3,7 @@ import type { Peer, DataConnection } from 'peerjs'
 import type { Patch } from 'immer'
 import { createMerge, inplaceMerge, splitIndex, preprocessImage } from 'helper'
 import { useGameStore, GameState } from './gameStore'
+import { loadPuzzle } from '../puzzle/import'
 
 const isBrowser = typeof window !== 'undefined'
 
@@ -16,6 +17,7 @@ type SudokuImageData = {
 
 type HostToClientData = {
   state?: BoardState
+  puzzle?: PuzzleDefinition
   userdataMap?: { [connectionKey: string]: Diff<Userdata> }
   image?: {
     file: Blob
@@ -51,6 +53,9 @@ interface NetworkStore {
   currentFile: Blob | null
   currentFileType: string | null
 
+  // Puzzle state
+  currentPuzzle: PuzzleDefinition | null
+
   // Actions
   networkDispatch: (mutator: (draft: GameState) => void) => void
   networkUndo: () => void
@@ -59,6 +64,7 @@ interface NetworkStore {
   joinGame: (hostId: string) => void
   disconnect: () => void
   updateUserdata: (update: Diff<Userdata>) => void
+  setPuzzle: (puzzle: PuzzleDefinition) => void
   setHostIdText: (text: string) => void
   setSelectedColor: (color: string) => void
   setPickingMe: (picking: boolean) => void
@@ -134,8 +140,14 @@ export const useNetworkStore = create<NetworkStore>()((set, get) => {
       }))
     }
 
+    if (data.puzzle) {
+      loadPuzzle(data.puzzle)
+    }
+
     if (data.state) {
-      useGameStore.getState().loadFullState(data.state)
+      // Preserve gridConfig already set by loadPuzzle (custom regions etc.)
+      const gridConfig = useGameStore.getState().gameState.gridConfig
+      useGameStore.getState().loadFullState(data.state, gridConfig)
     }
 
     if (data.image) {
@@ -162,7 +174,7 @@ export const useNetworkStore = create<NetworkStore>()((set, get) => {
       })
 
       // Send current state to new client
-      const { myUserdata, multiUserdata, onlineId, currentFile, currentFileType } = get()
+      const { myUserdata, multiUserdata, onlineId, currentFile, currentFileType, currentPuzzle } = get()
       const boardState = useGameStore.getState().gameState.boardState
 
       const payload: HostToClientData = {
@@ -173,6 +185,7 @@ export const useNetworkStore = create<NetworkStore>()((set, get) => {
         },
       }
 
+      if (currentPuzzle) payload.puzzle = currentPuzzle
       if (currentFile && currentFileType) {
         payload.image = { file: currentFile, filetype: currentFileType }
       }
@@ -211,6 +224,19 @@ export const useNetworkStore = create<NetworkStore>()((set, get) => {
     },
     currentFile: null,
     currentFileType: null,
+
+    currentPuzzle: null,
+
+    setPuzzle: (puzzle) => {
+      set({ currentPuzzle: puzzle })
+      const { clients } = get()
+      if (clients.size > 0) {
+        sendToClients({
+          puzzle,
+          state: useGameStore.getState().gameState.boardState,
+        })
+      }
+    },
 
     networkDispatch: (mutator) => {
       const { host, clients, onlineId } = get()

@@ -34,6 +34,7 @@ import { extensionColor } from 'helper'
 import { useUIStore } from '../stores/uiStore'
 import { importPuzzle } from '../puzzle/import'
 import { SolverSection } from '../solver/SolverSection'
+import { THEME_LIST } from '../themes'
 
 const SIDEBAR_WIDTH = 350
 
@@ -54,7 +55,7 @@ const SectionHeader = styled((props: AccordionSummaryProps) => (
 ))(({ theme }) => ({
   borderTop: `1px solid ${theme.palette.divider}`,
   borderBottom: `1px solid ${theme.palette.divider}`,
-  backgroundColor: 'rgba(0, 0, 0, .04)',
+  backgroundColor: theme.palette.action.hover,
   flexDirection: 'row-reverse',
   minHeight: 40,
   '& .MuiAccordionSummary-expandIconWrapper.Mui-expanded': {
@@ -79,7 +80,7 @@ const SubSectionHeader = styled((props: AccordionSummaryProps) => (
     {...props}
   />
 ))(({ theme }) => ({
-  backgroundColor: 'rgba(0, 0, 0, .02)',
+  backgroundColor: theme.palette.action.hover,
   flexDirection: 'row-reverse',
   minHeight: 32,
   '& .MuiAccordionSummary-expandIconWrapper.Mui-expanded': {
@@ -96,14 +97,16 @@ const ImportSection: React.FC = () => {
   const [importError, setImportError] = React.useState<string | null>(null)
   const [importSuccess, setImportSuccess] = React.useState<string | null>(null)
   const [importRuleset, setImportRuleset] = React.useState<string | null>(null)
+  const [importing, setImporting] = React.useState(false)
   const handleFileInput = useNetworkStore((s) => s.handleFileInput)
 
-  const handleImport = () => {
+  const handleImport = async () => {
     setImportError(null)
     setImportSuccess(null)
     setImportRuleset(null)
+    setImporting(true)
     try {
-      const puzzle = importPuzzle(importText.trim())
+      const puzzle = await importPuzzle(importText.trim())
       setImportSuccess(
         puzzle.metadata.title
           ? `Loaded "${puzzle.metadata.title}"`
@@ -113,6 +116,8 @@ const ImportSection: React.FC = () => {
       setImportText('')
     } catch (e: any) {
       setImportError(e.message || 'Failed to import puzzle')
+    } finally {
+      setImporting(false)
     }
   }
 
@@ -128,7 +133,7 @@ const ImportSection: React.FC = () => {
           maxRows={4}
           fullWidth
           size="small"
-          placeholder="Paste f-puzzles URL/base64 or SudokuPad URL (sudokupad.app/ctc…)"
+          placeholder="Paste f-puzzles URL/base64 or SudokuPad URL (sudokupad.app/ctc… or short link)"
           value={importText}
           onChange={(e) => setImportText(e.target.value)}
           sx={{
@@ -141,9 +146,9 @@ const ImportSection: React.FC = () => {
           fullWidth
           sx={{ mt: 1 }}
           onClick={handleImport}
-          disabled={!importText.trim()}
+          disabled={!importText.trim() || importing}
         >
-          Import
+          {importing ? 'Importing…' : 'Import'}
         </Button>
         {importError && (
           <Typography
@@ -416,6 +421,93 @@ const CURSOR_COLOR_PALETTE = [
   '#795548',
 ]
 
+const ThemePicker: React.FC = () => {
+  const themeId = useUIStore((s) => s.themeId)
+  const setThemeId = useUIStore((s) => s.setThemeId)
+  const lightThemes = THEME_LIST.filter((t) => !t.isDark)
+  const darkThemes = THEME_LIST.filter((t) => t.isDark)
+
+  const renderRow = (themes: typeof THEME_LIST) => (
+    <Box sx={{ display: 'flex', gap: 0.75 }}>
+      {themes.map((t) => (
+        <Tooltip key={t.id} title={t.name} placement="top">
+          <Box
+            component="button"
+            onClick={() => setThemeId(t.id)}
+            sx={{
+              flex: 1,
+              height: 36,
+              borderRadius: '6px',
+              border:
+                themeId === t.id
+                  ? '2px solid #1976d2'
+                  : '1.5px solid rgba(128,128,128,0.3)',
+              cursor: 'pointer',
+              overflow: 'hidden',
+              padding: 0,
+              position: 'relative',
+              background: t.cell.background,
+              outline: themeId === t.id ? '2px solid rgba(25,118,210,0.3)' : 'none',
+              outlineOffset: '1px',
+              transition: 'transform 0.1s',
+              '&:hover': { transform: 'scale(1.06)', zIndex: 1 },
+            }}
+          >
+            {/* Mini number preview */}
+            <Box
+              sx={{
+                position: 'absolute',
+                inset: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontWeight: 'bold',
+                fontSize: '0.9rem',
+                color: t.cell.enteredNumber,
+                fontFamily: 'Roboto, sans-serif',
+                lineHeight: 1,
+              }}
+            >
+              5
+            </Box>
+            {/* Fixed digit accent — top-left dot */}
+            <Box
+              sx={{
+                position: 'absolute',
+                top: 4,
+                left: 4,
+                width: 5,
+                height: 5,
+                borderRadius: '50%',
+                background: t.cell.fixedNumber,
+                opacity: 0.7,
+              }}
+            />
+          </Box>
+        </Tooltip>
+      ))}
+    </Box>
+  )
+
+  return (
+    <Box sx={{ mt: 1.5 }}>
+      <Typography variant="body2" sx={{ mb: 0.75 }}>
+        Board theme
+      </Typography>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.75 }}>
+        <Typography variant="caption" sx={{ opacity: 0.6, lineHeight: 1 }}>
+          Light
+        </Typography>
+        {renderRow(lightThemes)}
+        <Typography variant="caption" sx={{ opacity: 0.6, lineHeight: 1, mt: 0.25 }}>
+          Dark
+        </Typography>
+        {renderRow(darkThemes)}
+      </Box>
+    </Box>
+  )
+}
+
 const SettingsSection: React.FC = () => {
   const myColor = useNetworkStore((s) => s.myUserdata.color)
   const updateUserdata = useNetworkStore((s) => s.updateUserdata)
@@ -468,7 +560,7 @@ const SettingsSection: React.FC = () => {
                 height: 28,
                 borderRadius: '50%',
                 background: myColor,
-                border: '2px solid rgba(0,0,0,0.2)',
+                border: '2px solid rgba(128,128,128,0.35)',
                 cursor: 'pointer',
                 flexShrink: 0,
                 '&:hover': { opacity: 0.8 },
@@ -486,6 +578,7 @@ const SettingsSection: React.FC = () => {
             onChange={handleConflictsToggle}
           />
         </Box>
+        <ThemePicker />
         <Popover
           open={open}
           anchorEl={anchorEl}
@@ -513,11 +606,9 @@ const SettingsSection: React.FC = () => {
                     background: hex,
                     border:
                       myColor === hex
-                        ? '2px solid #333'
-                        : '1.5px solid rgba(0,0,0,0.15)',
+                        ? '2px solid var(--sudoku-fixed-number)'
+                        : '1.5px solid rgba(128,128,128,0.3)',
                     cursor: 'pointer',
-                    outline: myColor === hex ? '2px solid #fff' : 'none',
-                    outlineOffset: '-4px',
                     '&:hover': { transform: 'scale(1.15)', zIndex: 1 },
                     transition: 'transform 0.1s',
                     position: 'relative',
@@ -561,7 +652,9 @@ const NotesSection: React.FC = () => {
             fontSize: 13,
             padding: 8,
             borderRadius: 4,
-            border: '1px solid #ccc',
+            border: '1px solid var(--sudoku-board-gridline)',
+            background: 'var(--sudoku-cell-bg)',
+            color: 'var(--sudoku-fixed-number)',
             resize: 'vertical',
           }}
         />

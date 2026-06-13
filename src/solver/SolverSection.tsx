@@ -14,6 +14,7 @@ import { useGameStore } from '../stores/gameStore'
 import { useExtensionStore } from '../stores/extensionStore'
 import { useUIStore } from '../stores/uiStore'
 import type { SolverJob, WorkerInMessage, WorkerOutMessage } from './solverTypes'
+import { constraintHandlers } from './constraintHandlers'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -48,7 +49,8 @@ function extractBoard(rows: number, cols: number): number[] {
   const flat: number[] = new Array(rows * cols).fill(0)
   for (let r = 0; r < rows; r++) {
     for (let c = 0; c < cols; c++) {
-      flat[r * cols + c] = board[r]?.[c]?.number ?? 0
+      const cell = board[r]?.[c]
+      flat[r * cols + c] = cell?.fixed ? (cell.number ?? 0) : 0
     }
   }
   return flat
@@ -70,29 +72,9 @@ function buildJobs(
   const N = rows * cols
   const degree = new Int32Array(N)
   for (const con of constraints) {
-    let cells: number[] = []
-    switch (con.type) {
-      case 'unique_group': cells = con.cells; break
-      case 'thermo':       cells = con.cells; break
-      case 'between':      cells = con.line; break
-      case 'killer_cage':  cells = con.cells; break
-      case 'arrow':
-        cells = [...con.circle]
-        for (const l of con.lines) cells.push(...l)
-        break
-      case 'renban':     cells = con.cells; break
-      case 'whispers':
-        for (const [a, b] of con.pairs) { cells.push(a); cells.push(b) }
-        break
-      case 'palindrome':
-        for (const [a, b] of con.pairs) { cells.push(a); cells.push(b) }
-        break
-      case 'xv':         cells = [con.cell0, con.cell1]; break
-      case 'difference': cells = [con.cell0, con.cell1]; break
-      case 'ratio':      cells = [con.cell0, con.cell1]; break
-      case 'min_max':    cells = [con.cell, ...con.neighbors]; break
-    }
-    for (const c of cells) degree[c]++
+    const handler = constraintHandlers[con.type]
+    if (!handler) continue
+    for (const c of handler.cellsOf(con, N)) degree[c]++
   }
 
   let branchCell = -1

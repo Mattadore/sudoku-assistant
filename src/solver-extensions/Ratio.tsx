@@ -1,4 +1,19 @@
 import { cellCenter, gridViewBox, overlayStyle } from './svgHelpers'
+import { getCurrentTheme } from '../themes'
+import type { ConstraintHandler } from '../solver/solverTypes'
+
+export const solverHandler: ConstraintHandler = {
+  cellsOf: (con) => [con.cell0, con.cell1],
+  propagate: (cell, digit, con, maxDigit, _board, _domains, _removeBit, intersect) => {
+    const other = con.cell0 === cell ? con.cell1 : con.cell1 === cell ? con.cell0 : -1
+    if (other === -1) return true
+    let mask = 0
+    const a = digit * con.ratio; if (Number.isInteger(a) && a >= 1 && a <= maxDigit) mask |= 1 << a
+    const b = digit / con.ratio; if (Number.isInteger(b) && b >= 1 && b <= maxDigit) mask |= 1 << b
+    if (mask === 0) return false
+    return intersect(other, mask)
+  },
+}
 
 type PairData = { pairs: { cells: [BoardIndex, BoardIndex]; value?: number }[] }
 
@@ -48,7 +63,7 @@ export default class Ratio implements SolverExtension {
           const b = cc(pair.cells[1][0], pair.cells[1][1])
           const mx = (a.x + b.x) / 2
           const my = (a.y + b.y) / 2
-          return <circle key={i} cx={mx} cy={my} r={8} fill="#333" stroke="#333" strokeWidth={1.5} opacity={0.8} />
+          return <circle key={i} cx={mx} cy={my} r={8} fill={getCurrentTheme().overlay.dot} stroke={getCurrentTheme().overlay.dot} strokeWidth={1.5} opacity={0.8} />
         })}
       </svg>
     )

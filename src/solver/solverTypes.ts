@@ -3,21 +3,38 @@
 // All cell indices are flat: row * cols + col.
 // ---------------------------------------------------------------------------
 
-export type SolverConstraint =
-  | { type: 'unique_group'; cells: number[] }
-  | { type: 'thermo'; cells: number[] }
-  // first and last cells are endpoints; remainder are middles
-  | { type: 'between'; line: number[] }
-  | { type: 'killer_cage'; cells: number[]; total?: number }
-  | { type: 'arrow'; circle: number[]; lines: number[][] }
-  | { type: 'renban'; cells: number[] }
-  | { type: 'whispers'; pairs: [number, number][] }
-  | { type: 'palindrome'; pairs: [number, number][] }
-  | { type: 'xv'; cell0: number; cell1: number; total: number }
-  | { type: 'difference'; cell0: number; cell1: number; diff: number }
-  | { type: 'ratio'; cell0: number; cell1: number; ratio: number }
-  | { type: 'min_max'; cell: number; neighbors: number[]; isMax: boolean }
-  | { type: 'antiknight'; rows: number; cols: number }
+export type SolverConstraint = { type: string } & Record<string, unknown>
+
+/**
+ * A constraint handler plugs into the solver worker's propagation engine.
+ * Extensions export one of these so that solver.worker.ts never needs to know
+ * about specific constraint types.
+ */
+export type ConstraintHandler = {
+  /** Flat cell indices that should reference this constraint in the lookup table. */
+  cellsOf(con: any, N: number): number[]
+  /**
+   * Called when `digit` is placed in `cell`. Narrow other cells' domains via
+   * `removeBit` / `intersect`. Return false on contradiction.
+   */
+  propagate(
+    cell: number,
+    digit: number,
+    con: any,
+    maxDigit: number,
+    board: Uint8Array,
+    domains: Uint16Array,
+    removeBit: (c: number, bit: number) => boolean,
+    intersect: (c: number, mask: number) => boolean,
+  ): boolean
+  /**
+   * Optional. Called once per constraint after domains are initialized but
+   * before any propagation or backtracking. Use this for constraints that
+   * restrict a cell's own domain rather than propagating between cells
+   * (e.g., parity). Return false if the constraint is immediately violated.
+   */
+  initialize?(con: any, N: number, board: Uint8Array, domains: Uint16Array, maxDigit: number): boolean
+}
 
 export type SolverJob = {
   jobId: string

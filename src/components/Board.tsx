@@ -2,7 +2,7 @@ import * as React from 'react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import emoStyled from '@emotion/styled'
 import { styled } from '@mui/material/styles'
-import { Box, Chip, Container } from '@mui/material' // Chip used for conflict mode indicator
+import { Box, Container } from '@mui/material'
 import { useGameStore } from '../stores/gameStore'
 import { useNetworkStore } from '../stores/networkStore'
 import { useExtensionStore } from '../stores/extensionStore'
@@ -79,7 +79,7 @@ const GridBackground = styled(Box)`
   position: relative;
   margin: 0;
   padding: 0px;
-  background-color: #000000;
+  background-color: var(--sudoku-board-gridline);
   z-index: 0;
 `
 
@@ -88,27 +88,25 @@ const OuterArea = styled(Box)`
   position: relative;
 `
 
-const ImageCanvases = React.memo(
-  ({ image }: { image: SudokuImageData }) => (
-    <>
-      <SudokuImageCanvas
-        style={{ zIndex: 300 }}
-        image={image}
-        id="sudoku-annotations"
-      />
-      <SudokuImageCanvas
-        style={{ zIndex: 250 }}
-        image={image}
-        id="sudoku-extensions"
-      />
-      <SudokuImageCanvas
-        style={{ zIndex: 200 }}
-        image={image}
-        id="sudoku-image"
-      />
-    </>
-  ),
-)
+const ImageCanvases = React.memo(({ image }: { image: SudokuImageData }) => (
+  <>
+    <SudokuImageCanvas
+      style={{ zIndex: 300 }}
+      image={image}
+      id="sudoku-annotations"
+    />
+    <SudokuImageCanvas
+      style={{ zIndex: 250 }}
+      image={image}
+      id="sudoku-extensions"
+    />
+    <SudokuImageCanvas
+      style={{ zIndex: 200 }}
+      image={image}
+      id="sudoku-image"
+    />
+  </>
+))
 
 // Cell size in px (matches GridCell 5rem = 80px at default font size)
 const CELL_SIZE = 80
@@ -134,6 +132,7 @@ const ExtensionUnderlays: React.FC = React.memo(() => {
   const boardState = useGameStore((s) => s.gameState.boardState)
   const gridConfig = useGameStore((s) => s.gameState.gridConfig)
   const disabledExtensions = useUIStore((s) => s.disabledExtensions)
+  useUIStore((s) => s.themeId) // re-render when theme changes
   const underlays = Object.values(extensions)
     .filter(
       (ext) =>
@@ -180,9 +179,11 @@ const ExtensionOverlays: React.FC = React.memo(() => {
   const extensions = useExtensionStore((s) => s.extensions)
   const boardState = useGameStore((s) => s.gameState.boardState)
   const disabledExtensions = useUIStore((s) => s.disabledExtensions)
+  useUIStore((s) => s.themeId) // re-render when theme changes so extensions pick up new colors
   const overlays = Object.values(extensions)
     .filter(
-      (ext) => ext.getBoardOverlay && !disabledExtensions.has(ext.extensionName),
+      (ext) =>
+        ext.getBoardOverlay && !disabledExtensions.has(ext.extensionName),
     )
     .map((ext) => (
       <React.Fragment key={ext.extensionName}>
@@ -196,6 +197,7 @@ const OuterExtensionOverlays: React.FC = React.memo(() => {
   const extensions = useExtensionStore((s) => s.extensions)
   const boardState = useGameStore((s) => s.gameState.boardState)
   const disabledExtensions = useUIStore((s) => s.disabledExtensions)
+  useUIStore((s) => s.themeId) // re-render when theme changes
   const overlays = Object.values(extensions)
     .filter(
       (ext) =>
@@ -271,7 +273,7 @@ const ConflictArrowOverlay: React.FC = React.memo(() => {
   return (
     <svg
       viewBox={gridViewBox(CELL_SIZE, gridConfig.rows, gridConfig.cols)}
-      style={{ ...overlayStyle(), zIndex: 600 }}
+      style={{ ...overlayStyle(), zIndex: 6000, opacity: 0.8 }}
     >
       <defs>
         {extNames.map((name) => (
@@ -361,10 +363,8 @@ export const Board: React.FC = () => {
   }, [isCompact])
 
   // Natural (unscaled) dimensions of the grid + outer area
-  const naturalW =
-    (gridConfig.cols + 2) * CELL_STRIDE + CELL_GAP
-  const naturalH =
-    (gridConfig.rows + 2) * CELL_STRIDE + CELL_GAP
+  const naturalW = (gridConfig.cols + 2) * CELL_STRIDE + CELL_GAP
+  const naturalH = (gridConfig.rows + 2) * CELL_STRIDE + CELL_GAP
 
   const gridScale =
     containerSize.w > 0 && containerSize.h > 0
@@ -374,50 +374,6 @@ export const Board: React.FC = () => {
           1,
         )
       : 1
-
-  // Compute conflict highlights when selector changes
-  const selectorIndex = useNetworkStore((s) => s.myUserdata.selectorIndex)
-  useEffect(() => {
-    if (!selectorIndex) {
-      useUIStore.getState().setConflictHighlights([])
-      return
-    }
-    const [row, col] = splitIndex(selectorIndex)
-    const cellData = useGameStore.getState().gameState.boardState[row]?.[col]
-    const conflictData =
-      useExtensionStore.getState().conflictMatrix[row]?.[col]
-    if (!conflictData || !cellData?.number) {
-      useUIStore.getState().setConflictHighlights([])
-      return
-    }
-    const conflicting = conflictData.conflicts[cellData.number - 1]
-    const indices = conflicting
-      .map(([r, c]) => `${r},${c}`)
-      .filter((idx) => idx !== selectorIndex)
-    useUIStore.getState().setConflictHighlights(indices)
-  }, [selectorIndex])
-
-  // Also recompute when board state changes at the selected cell
-  const selectedCellNumber = useGameStore((s) => {
-    if (!selectorIndex) return null
-    const [row, col] = splitIndex(selectorIndex)
-    return s.gameState.boardState[row]?.[col]?.number ?? null
-  })
-  useEffect(() => {
-    if (!selectorIndex || !selectedCellNumber) {
-      useUIStore.getState().setConflictHighlights([])
-      return
-    }
-    const [row, col] = splitIndex(selectorIndex)
-    const conflictData =
-      useExtensionStore.getState().conflictMatrix[row]?.[col]
-    if (!conflictData) return
-    const conflicting = conflictData.conflicts[selectedCellNumber - 1]
-    const indices = conflicting
-      .map(([r, c]) => `${r},${c}`)
-      .filter((idx) => idx !== selectorIndex)
-    useUIStore.getState().setConflictHighlights(indices)
-  }, [selectorIndex, selectedCellNumber])
 
   // Deselect keyboard focus when clicking outside the grid
   useEffect(() => {
@@ -468,8 +424,6 @@ export const Board: React.FC = () => {
       }, 50)
     }
   }, [boardState, conflictMatrix, timerRunning])
-
-  const conflictMode = useUIStore((s) => s.conflictMode)
 
   return (
     <Container
@@ -533,14 +487,6 @@ export const Board: React.FC = () => {
               </GridBackground>
             </OuterArea>
           </Box>
-          {conflictMode && (
-            <Chip
-              label="Conflict Mode"
-              size="small"
-              color="warning"
-              sx={{ position: 'absolute', bottom: 4, left: 4 }}
-            />
-          )}
         </Box>
         {!isCompact && (
           <Box ref={padRef} sx={{ flexShrink: 0 }}>

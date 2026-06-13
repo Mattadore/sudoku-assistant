@@ -1,4 +1,22 @@
 import { cellCenter, gridViewBox, overlayStyle } from './svgHelpers'
+import { getCurrentTheme } from '../themes'
+import type { ConstraintHandler } from '../solver/solverTypes'
+
+export const solverHandler: ConstraintHandler = {
+  cellsOf: (con) => {
+    const seen = new Set<number>()
+    for (const [a, b] of con.pairs as [number, number][]) { seen.add(a); seen.add(b) }
+    return [...seen]
+  },
+  propagate: (cell, digit, con, _maxDigit, _board, _domains, _removeBit, intersect) => {
+    const bit = 1 << digit
+    for (const [a, b] of con.pairs as [number, number][]) {
+      if (a === cell) { if (!intersect(b, bit)) return false }
+      else if (b === cell) { if (!intersect(a, bit)) return false }
+    }
+    return true
+  },
+}
 
 type LineData = { lines: BoardIndex[][] }
 
@@ -52,7 +70,7 @@ export default class Palindrome implements SolverExtension {
       <svg style={overlayStyle()} viewBox={gridViewBox(cellSize, _board.length, _board[0].length)}>
         {this.data.map((line, i) => {
           const points = line.map(([r, c]) => { const p = cc(r, c); return `${p.x},${p.y}` }).join(' ')
-          return <polyline key={i} points={points} fill="none" stroke="#AAAAAA" strokeWidth={lineWidth} strokeLinecap="round" strokeLinejoin="round" opacity={0.5} />
+          return <polyline key={i} points={points} fill="none" stroke={getCurrentTheme().overlay.line} strokeWidth={lineWidth} strokeLinecap="round" strokeLinejoin="round" opacity={0.5} />
         })}
       </svg>
     )

@@ -1,4 +1,26 @@
+import type { ConstraintHandler } from '../solver/solverTypes'
+
 type Parity = 'odd' | 'even'
+
+// Parity is a domain restriction, not a propagation rule: we just narrow
+// each constrained cell's domain to odd or even digits at initialization.
+export const solverHandler: ConstraintHandler = {
+  cellsOf: (con) => [con.cell as number],
+  propagate: () => true, // domain is fully set by initialize; nothing to propagate
+  initialize: (con, _N, board, domains, maxDigit) => {
+    const c = con.cell as number
+    if (board[c] > 0) return true // already placed, domain already a singleton
+    const isOdd = (con.parity as string) === 'odd'
+    let mask = 0
+    for (let d = 1; d <= maxDigit; d++) {
+      if (isOdd ? d % 2 === 1 : d % 2 === 0) mask |= 1 << d
+    }
+    const nd = domains[c] & mask
+    if (nd === 0) return false
+    domains[c] = nd
+    return true
+  },
+}
 
 export default class OddEven implements SolverExtension {
   extensionName: string
@@ -49,6 +71,13 @@ export default class OddEven implements SolverExtension {
         }}
       />
     )
+  }
+
+  serializeConstraints = (_rows: number, cols: number): SolverConstraint[] => {
+    return [...this.cells].map((key) => {
+      const [r, c] = key.split(',').map(Number)
+      return { type: 'odd_even', cell: r * cols + c, parity: this.parity }
+    })
   }
 
   loadPuzzleData = (data: { cells: BoardIndex[] }) => {

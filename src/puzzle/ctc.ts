@@ -145,6 +145,46 @@ function ctcCoord(r: number, c: number): [number, number] {
   return [r - 0.5, c - 0.5]
 }
 
+// A CTC line waypoint sits at a cell centre (r+0.5, c+0.5 in corner-origin).
+// Convert it to a 0-indexed BoardIndex.
+function waypointToCell(r: number, c: number): BoardIndex {
+  return [Math.round(r - 0.5), Math.round(c - 0.5)]
+}
+
+// Parse a CTC hex colour (#rgb, #rgba, #rrggbb, #rrggbbaa) into RGB channels.
+function parseHexColor(hex: string): { r: number; g: number; b: number } | null {
+  let h = hex.trim().replace(/^#/, '')
+  if (h.length === 3 || h.length === 4) {
+    // Shorthand: take the RGB nibbles and double each (#aaf → #aaaaff).
+    h = h
+      .slice(0, 3)
+      .split('')
+      .map((ch) => ch + ch)
+      .join('')
+  } else if (h.length === 6 || h.length === 8) {
+    h = h.slice(0, 6)
+  } else {
+    return null
+  }
+  const n = parseInt(h, 16)
+  if (Number.isNaN(n)) return null
+  return { r: (n >> 16) & 0xff, g: (n >> 8) & 0xff, b: n & 0xff }
+}
+
+// SudokuPad's SCL format doesn't type line constraints — palindromes are
+// encoded as plain grey cosmetic lines (no endpoint bulbs/circles, unlike
+// thermometers/between-lines). We treat a roughly grey, mid-toned line as a
+// palindrome; coloured lines (renban, whispers, etc.) stay cosmetic.
+function isPalindromeColor(color: string | undefined): boolean {
+  if (!color) return false
+  const rgb = parseHexColor(color)
+  if (!rgb) return false
+  const max = Math.max(rgb.r, rgb.g, rgb.b)
+  const min = Math.min(rgb.r, rgb.g, rgb.b)
+  if (max - min > 24) return false // coloured, not greyscale
+  return min >= 60 && max <= 230 // exclude near-black borders and near-white
+}
+
 export function convertCTCToPuzzle(data: CTCData): PuzzleDefinition {
   const rows = data.cells?.length ?? 9
   const cols = (data.cells?.[0] as CTCCell[] | undefined)?.length ?? rows
@@ -221,8 +261,31 @@ export function convertCTCToPuzzle(data: CTCData): PuzzleDefinition {
     size: number
   }[] = []
 
+  // Grey lines are interpreted as palindrome constraints (see isPalindromeColor);
+  // everything else is rendered as a cosmetic line.
+  const palindromeLines: BoardIndex[][] = []
+
   for (const line of (data.lines as CTCLine[]) ?? []) {
     if (!line.wayPoints?.length) continue
+
+    if (isPalindromeColor(line.color)) {
+      // Map waypoints (cell centres) to board cells, dropping out-of-bounds
+      // points and consecutive repeats.
+      const cells: BoardIndex[] = []
+      for (const [wr, wc] of line.wayPoints) {
+        const cell = waypointToCell(wr, wc)
+        if (cell[0] < 0 || cell[0] >= size || cell[1] < 0 || cell[1] >= size)
+          continue
+        const prev = cells[cells.length - 1]
+        if (prev && prev[0] === cell[0] && prev[1] === cell[1]) continue
+        cells.push(cell)
+      }
+      if (cells.length >= 2) {
+        palindromeLines.push(cells)
+        continue
+      }
+    }
+
     cosmeticLines.push({
       points: line.wayPoints.map(([r, c]) => ctcCoord(r, c)),
       color: line.color ?? '#000000',
@@ -252,6 +315,10 @@ export function convertCTCToPuzzle(data: CTCData): PuzzleDefinition {
         fontColor: overlay.fontColor,
       })
     }
+  }
+
+  if (palindromeLines.length > 0) {
+    constraints.push({ type: 'palindrome', data: { lines: palindromeLines } })
   }
 
   if (cosmeticLines.length > 0 || cosmeticCircles.length > 0 || cosmeticTexts.length > 0) {

@@ -1,19 +1,6 @@
-// Constraint types used by the solver worker (mirrored in src/solver/solverTypes.ts)
+// Constraint types used by the solver worker (kept opaque — each extension owns its own shape)
 // Cell indices are flat: row * cols + col
-type SolverConstraint =
-  | { type: 'unique_group'; cells: number[] }
-  | { type: 'thermo'; cells: number[] }
-  | { type: 'between'; line: number[] }
-  | { type: 'killer_cage'; cells: number[]; total?: number }
-  | { type: 'arrow'; circle: number[]; lines: number[][] }
-  | { type: 'renban'; cells: number[] }
-  | { type: 'whispers'; pairs: [number, number][] }
-  | { type: 'palindrome'; pairs: [number, number][] }
-  | { type: 'xv'; cell0: number; cell1: number; total: number }
-  | { type: 'difference'; cell0: number; cell1: number; diff: number }
-  | { type: 'ratio'; cell0: number; cell1: number; ratio: number }
-  | { type: 'min_max'; cell: number; neighbors: number[]; isMax: boolean }
-  | { type: 'antiknight'; rows: number; cols: number }
+type SolverConstraint = { type: string } & Record<string, unknown>
 
 // like Partial<> but recursive
 type Diff<T> = {

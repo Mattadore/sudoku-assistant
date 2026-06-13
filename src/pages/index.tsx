@@ -24,7 +24,7 @@ const Page = () => (
               margin: 0;
               padding: 0;
               overflow: hidden;
-              background-color: #ddddff;
+              background-color: var(--sudoku-page-bg, #ddddff);
             }
           `}</style>
           <Sidebar />

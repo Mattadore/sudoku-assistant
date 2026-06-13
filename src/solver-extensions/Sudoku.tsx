@@ -1,5 +1,19 @@
 import { computeDefaultRegions } from '../stores/gameStore'
 import { cellCenter, gridViewBox, overlayStyle } from './svgHelpers'
+import { getCurrentTheme } from '../themes'
+import type { ConstraintHandler } from '../solver/solverTypes'
+
+export const solverHandler: ConstraintHandler = {
+  cellsOf: (con) => con.cells,
+  propagate: (cell, digit, con, _maxDigit, _board, _domains, removeBit) => {
+    const bit = 1 << digit
+    for (const other of con.cells as number[]) {
+      if (other === cell) continue
+      if (!removeBit(other, bit)) return false
+    }
+    return true
+  },
+}
 
 export default class Sudoku implements SolverExtension {
   extensionName = 'sudoku'
@@ -155,7 +169,7 @@ export default class Sudoku implements SolverExtension {
           width={borderX2 - borderX1}
           height={borderY2 - borderY1}
           fill="none"
-          stroke="#333333"
+          stroke={getCurrentTheme().board.border}
           strokeWidth={3}
         />
         {segments.map((s, i) => (
@@ -165,7 +179,7 @@ export default class Sudoku implements SolverExtension {
             y1={s.y1}
             x2={s.x2}
             y2={s.y2}
-            stroke="#333333"
+            stroke={getCurrentTheme().board.border}
             strokeWidth={3}
           />
         ))}

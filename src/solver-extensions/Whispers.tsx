@@ -1,4 +1,27 @@
 import { cellCenter, gridViewBox, overlayStyle } from './svgHelpers'
+import { getCurrentTheme } from '../themes'
+import type { ConstraintHandler } from '../solver/solverTypes'
+
+export const solverHandler: ConstraintHandler = {
+  cellsOf: (con) => {
+    const seen = new Set<number>()
+    for (const [a, b] of con.pairs as [number, number][]) { seen.add(a); seen.add(b) }
+    return [...seen]
+  },
+  propagate: (cell, digit, con, maxDigit, _board, _domains, _removeBit, intersect) => {
+    for (const [a, b] of con.pairs as [number, number][]) {
+      const other = a === cell ? b : b === cell ? a : -1
+      if (other === -1) continue
+      let mask = 0
+      for (let d = 1; d <= maxDigit; d++) {
+        if (Math.abs(d - digit) >= 5) mask |= 1 << d
+      }
+      if (mask === 0) return false
+      if (!intersect(other, mask)) return false
+    }
+    return true
+  },
+}
 
 type LineData = { lines: BoardIndex[][] }
 
@@ -50,7 +73,7 @@ export default class Whispers implements SolverExtension {
       <svg style={overlayStyle()} viewBox={gridViewBox(cellSize, _board.length, _board[0].length)}>
         {this.data.map((line, i) => {
           const points = line.map(([r, c]) => { const p = cc(r, c); return `${p.x},${p.y}` }).join(' ')
-          return <polyline key={i} points={points} fill="none" stroke="#44BB44" strokeWidth={lineWidth} strokeLinecap="round" strokeLinejoin="round" opacity={0.5} />
+          return <polyline key={i} points={points} fill="none" stroke={getCurrentTheme().overlay.whispers} strokeWidth={lineWidth} strokeLinecap="round" strokeLinejoin="round" opacity={0.5} />
         })}
       </svg>
     )

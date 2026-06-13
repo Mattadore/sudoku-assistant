@@ -61,10 +61,10 @@ const DigitButton = styled(Button)`
   font-weight: 700;
   padding: 0;
   border-radius: 8px;
-  color: #222;
-  background: #e8e8f0;
+  color: var(--sudoku-fixed-number);
+  background: var(--sudoku-cell-bg);
   &:hover {
-    background: #d0d0e0;
+    background: var(--sudoku-board-gridline);
   }
 `
 
@@ -99,10 +99,10 @@ const ActionButton = styled(Button)`
   min-width: var(--pad-btn);
   min-height: var(--pad-action-h);
   border-radius: 8px;
-  color: #444;
-  background: #e0e0e8;
+  color: var(--sudoku-fixed-number);
+  background: var(--sudoku-cell-bg);
   &:hover {
-    background: #d0d0d8;
+    background: var(--sudoku-board-gridline);
   }
 `
 
@@ -139,7 +139,7 @@ const TimerDisplay: React.FC = () => {
           fontWeight: 600,
           minWidth: 72,
           textAlign: 'center',
-          color: running ? '#222' : '#888',
+          color: running ? 'var(--sudoku-fixed-number)' : 'var(--sudoku-board-border)',
         }}
       >
         {formatTime(elapsed)}

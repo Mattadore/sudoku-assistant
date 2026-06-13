@@ -1,4 +1,26 @@
 import { cellCenter } from './svgHelpers'
+import { getCurrentTheme } from '../themes'
+import type { ConstraintHandler } from '../solver/solverTypes'
+
+export const solverHandler: ConstraintHandler = {
+  cellsOf: (con) => con.cells,
+  propagate: (cell, digit, con, maxDigit, _board, _domains, _removeBit, intersect) => {
+    const cells = con.cells as number[]
+    const pos = cells.indexOf(cell)
+    if (pos === -1) return true
+    for (let j = 0; j < pos; j++) {
+      let mask = 0
+      for (let d = 1; d < digit; d++) mask |= 1 << d
+      if (!intersect(cells[j], mask)) return false
+    }
+    for (let j = pos + 1; j < cells.length; j++) {
+      let mask = 0
+      for (let d = digit + 1; d <= maxDigit; d++) mask |= 1 << d
+      if (!intersect(cells[j], mask)) return false
+    }
+    return true
+  },
+}
 
 // [thermo#][segment#] = [row, col]
 type ThermoData = BoardIndex[][]
@@ -85,7 +107,7 @@ export default class Thermometer implements SolverExtension {
               <polyline
                 points={points}
                 fill="none"
-                stroke="#AAAAAA"
+                stroke={getCurrentTheme().overlay.line}
                 strokeWidth={lineWidth}
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -94,7 +116,7 @@ export default class Thermometer implements SolverExtension {
                 cx={bulb.x}
                 cy={bulb.y}
                 r={bulbRadius}
-                fill="#AAAAAA"
+                fill={getCurrentTheme().overlay.line}
               />
             </g>
           )

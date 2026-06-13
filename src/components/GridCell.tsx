@@ -6,7 +6,6 @@ import { Typography } from '@mui/material'
 import { useGameStore } from '../stores/gameStore'
 import { useExtensionStore } from '../stores/extensionStore'
 import { useNetworkStore } from '../stores/networkStore'
-import { useUIStore } from '../stores/uiStore'
 import { stringIndex } from 'helper'
 
 const GridCellStyle = emoStyled.div`
@@ -21,42 +20,34 @@ const GridCellBackground = emoStyled.div`
   z-index: 210;
 `
 
-const ConflictHighlightOverlay = emoStyled.div`
-  position: absolute;
-  top: 0;
-  left: 0;
-  width: 100%;
-  height: 100%;
-  background-color: rgba(172, 50, 53, 0.2);
-  z-index: 205;
-  pointer-events: none;
-`
 
 const GridCellHighlightedAcross = emoStyled.div`
-  z-index: 500;
+  z-index: 6000;
   top: calc(50% - 2px);
   left: 0;
   width: 15px;
   height: 4px;
   position: absolute;
   background-color: #ddaa00;
+  opacity: 0.8;
 `
 
 const GridSelectedCircle = emoStyled.div`
   position: absolute;
-  z-index: -500;
+  z-index: 6000;
   background-color: #ffcc00;
   top: calc(50% - 0.75rem);
   left: calc(50% - 0.75rem);
   width: 1.5rem;
   height: 1.5rem;
   border-radius: 50%;
+  opacity: 0.9;
 `
 
 const CentralNumberContainer = styled(Typography)`
   z-index: 5000;
   font-size: 4rem;
-  color: #00ccff;
+  color: var(--sudoku-entered-number);
   font-weight: bold;
   width: 100%;
   height: 100%;
@@ -74,19 +65,20 @@ const NumbersContainer = emoStyled.div`
 `
 
 const GridCellHighlightedUp = emoStyled.div`
-  z-index: 500;
+  z-index: 6000;
   left: calc(50% - 2px);
   top: 0;
   width: 4px;
   height: 15px;
   position: absolute;
   background-color: #ddaa00;
+  opacity: 0.8;
 `
 
 const HintNumberTopLeft = styled(Typography)`
   position: absolute;
   z-index: 2000;
-  color: #00ccff;
+  color: var(--sudoku-annotation);
   top: 3px;
   left: 3px;
   font-weight: bold;
@@ -96,7 +88,7 @@ const HintNumberTopLeft = styled(Typography)`
 const HintNumberBottomRight = styled(Typography)`
   position: absolute;
   z-index: 2000;
-  color: #00ccff;
+  color: var(--sudoku-annotation);
   bottom: 3px;
   right: 3px;
   font-weight: bold;
@@ -121,7 +113,7 @@ const NumberAnnotation: React.FC<{
   <span
     style={
       conflicts.includes(num)
-        ? { color: '#AC3235', display: 'inline-block' }
+        ? { color: 'var(--sudoku-conflict-number)', display: 'inline-block' }
         : { display: 'inline-block' }
     }
   >
@@ -138,11 +130,6 @@ export const GridCell: React.FC<GridCellProps> = React.memo(
     const data = useGameStore((s) => s.gameState.boardState[row][column])
     const conflictData = useExtensionStore(
       (s) => s.conflictMatrix[row]?.[column],
-    )
-
-    // Conflict highlight (is another cell with a conflict pointing at us?)
-    const isConflictHighlighted = useUIStore((s) =>
-      s.conflictHighlightSet.has(index),
     )
 
     // Collect all users selecting this cell (for multi-user dot ring)
@@ -200,7 +187,7 @@ export const GridCell: React.FC<GridCellProps> = React.memo(
         <GridCellBackground
           style={
             data.color.length === 0
-              ? { backgroundColor: imageLoaded ? '#00000000' : '#ffffff' }
+              ? { backgroundColor: imageLoaded ? 'transparent' : 'var(--sudoku-cell-bg)' }
               : data.color.length === 1
               ? { backgroundColor: data.color[0] }
               : {
@@ -215,16 +202,15 @@ export const GridCell: React.FC<GridCellProps> = React.memo(
                 }
           }
         />
-        {isConflictHighlighted && <ConflictHighlightOverlay />}
         <NumbersContainer>
           <CentralNumberContainer
             style={
               !data.number
                 ? { fontSize: '1.5rem' }
                 : data.number && data.fixed
-                ? { color: '#171717', fontSize: '4.3rem' }
+                ? { color: 'var(--sudoku-fixed-number)', fontSize: '4.3rem' }
                 : conflictList.includes(data.number)
-                ? { color: '#AC3235' }
+                ? { color: 'var(--sudoku-conflict-number)' }
                 : {}
             }
             className="noselect"
@@ -267,15 +253,16 @@ export const GridCell: React.FC<GridCellProps> = React.memo(
                 position: 'absolute',
                 top: '50%',
                 left: '50%',
-                zIndex: -500,
+                zIndex: 6000,
+                opacity: 0.9,
                 pointerEvents: 'none',
               }}
             >
               {selectingUserColors.map((color, i) => {
                 const count = selectingUserColors.length
-                const dotSize = Math.max(10, 18 - count * 2)
-                const radius = 18
-                const angle = (2 * Math.PI * i) / count - Math.PI / 2
+                const dotSize = Math.max(15, (18 - count * 2) * 1.5)
+                const radius = 14
+                const angle = (2 * Math.PI * i) / count - Math.PI / 4
                 const x = Math.cos(angle) * radius
                 const y = Math.sin(angle) * radius
                 return (

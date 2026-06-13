@@ -106,10 +106,28 @@ export const useExtensionStore = create<ExtensionStore>()((set, get) => ({
       return targets
     }
 
-    // First pass: process all changed cells
-    const changedSet = new Set(changedIndices)
-    const neighbors = new Set<string>()
+    // A cell's conflicts can depend on the whole state of a group it belongs
+    // to (e.g. a killer cage's sum or no-repeat rule), not just its own value.
+    // So when a cell changes, every cell that currently declares a conflict ON
+    // it must be reprocessed too: those declarations were computed from a board
+    // state that included the changed cell's old value, and would otherwise go
+    // stale — leaving cells highlighted after the cause is gone (e.g. a cage
+    // stays red after you clear a cell that broke its sum). Gather these
+    // reverse dependencies BEFORE any matrix mutation.
+    const toProcess = new Set<string>(changedIndices)
     for (const index of changedIndices) {
+      const [r, c] = index.split(',').map((i) => parseInt(i))
+      for (const numberConflicts of conflictMatrix[r][c].conflicts) {
+        for (const [sr, sc] of numberConflicts) {
+          toProcess.add(`${sr},${sc}`)
+        }
+      }
+    }
+
+    // First pass: process all affected cells
+    const changedSet = toProcess
+    const neighbors = new Set<string>()
+    for (const index of toProcess) {
       for (const target of processCell(index)) {
         if (!changedSet.has(target)) neighbors.add(target)
       }

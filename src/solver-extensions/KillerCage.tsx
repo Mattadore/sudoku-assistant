@@ -1,6 +1,96 @@
-type CageData = { cages: { cells: BoardIndex[]; total?: number }[] }
 import { cellCenter, gridViewBox, overlayStyle } from './svgHelpers'
 import { FONT_FAMILY } from '../theme'
+import { getCurrentTheme } from '../themes'
+import type { ConstraintHandler } from '../solver/solverTypes'
+
+type CageData = { cages: { cells: BoardIndex[]; total?: number }[] }
+
+export const solverHandler: ConstraintHandler = {
+  cellsOf: (con) => con.cells,
+
+  propagate: (cell, digit, con, maxDigit, board, domains, removeBit, intersect) => {
+    // Step 1: uniqueness — no other cell in the cage can hold this digit.
+    const bit = 1 << digit
+    for (const other of con.cells as number[]) {
+      if (other === cell) continue
+      if (!removeBit(other, bit)) return false
+    }
+
+    // No total to enforce — uniqueness is all we need.
+    if (con.total === undefined) return true
+
+    // Step 2: sum propagation — narrow each empty cell's domain using the
+    // remaining sum budget and which digits are still available.
+
+    // Tally what's already placed in the cage.
+    let placedSum = 0, usedBits = 0
+    const emptyCells: number[] = []
+    for (const c of con.cells as number[]) {
+      if (board[c] > 0) { placedSum += board[c]; usedBits |= 1 << board[c] }
+      else emptyCells.push(c)
+    }
+
+    const remaining = (con.total as number) - placedSum
+    const k = emptyCells.length
+
+    // All cells placed: sum must be exact.
+    if (k === 0) return remaining === 0
+
+    // One cell left: it must equal the remaining sum exactly.
+    if (k === 1) {
+      if (remaining < 1 || remaining > maxDigit) return false
+      return intersect(emptyCells[0], 1 << remaining)
+    }
+
+    // Build the sorted list of digits still available to the cage
+    // (digits not yet placed in any cage cell).
+    const availBits = (((1 << (maxDigit + 1)) - 1) & ~1) & ~usedBits
+    const avail: number[] = []
+    for (let d = 1; d <= maxDigit; d++) { if (availBits & (1 << d)) avail.push(d) }
+    if (avail.length < k) return false
+
+    // Quick feasibility check: can k distinct available digits sum to `remaining`?
+    // minSum uses the k smallest available; maxSum uses the k largest.
+    let minSum = 0, maxSum = 0
+    for (let i = 0; i < k; i++) minSum += avail[i]
+    for (let i = avail.length - k; i < avail.length; i++) maxSum += avail[i]
+    if (remaining < minSum || remaining > maxSum) return false
+
+    // Per-cell pruning: for each digit d that could go in cell c, check whether
+    // the remaining k-1 cells can still reach (remaining - d) using other
+    // available digits. We do this by computing the min/max achievable sum of
+    // k-1 digits from avail, excluding d.
+    for (const c of emptyCells) {
+      let newMask = 0
+      for (let d = 1; d <= maxDigit; d++) {
+        if (!(domains[c] & (1 << d))) continue   // d not in this cell's domain
+        if (!(availBits & (1 << d))) continue     // d already used elsewhere in cage
+
+        const need = (remaining as number) - d    // what the other k-1 cells must sum to
+
+        // Minimum sum of k-1 values from avail excluding d (take smallest k-1).
+        let lo = 0, cnt = 0
+        for (let i = 0; i < avail.length && cnt < k - 1; i++) {
+          if (avail[i] !== d) { lo += avail[i]; cnt++ }
+        }
+        if (cnt < k - 1) continue  // not enough other digits available
+
+        // Maximum sum of k-1 values from avail excluding d (take largest k-1).
+        let hi = 0
+        cnt = 0
+        for (let i = avail.length - 1; i >= 0 && cnt < k - 1; i--) {
+          if (avail[i] !== d) { hi += avail[i]; cnt++ }
+        }
+
+        // d is viable only if the rest can achieve the needed sum.
+        if (need >= lo && need <= hi) newMask |= 1 << d
+      }
+      if (newMask === 0) return false
+      if (!intersect(c, newMask)) return false
+    }
+    return true
+  },
+}
 
 export default class KillerCage implements SolverExtension {
   extensionName = 'killercage'
@@ -42,11 +132,18 @@ export default class KillerCage implements SolverExtension {
         }
       }
 
-      // Sum rule: only check when all cells are filled and a total is defined
-      if (allFilled && cage.total !== undefined) {
+      // Sum rule (only when the cage has a target total):
+      //   - cage full but sum !== total → wrong, all cells conflict
+      //   - cage not yet full but the filled cells already exceed the total →
+      //     impossible to complete (digits are positive), so they conflict now
+      // Checking the partial overshoot makes the highlight depend only on the
+      // current board, never on the order cells were filled or cleared.
+      if (cage.total !== undefined) {
         const sum = cellNums.reduce((acc, { n }) => acc + n, 0)
-        if (sum !== cage.total) {
-          // Wrong sum — ALL cells (including self) conflict on their numbers
+        const wrongWhenFull = allFilled && sum !== cage.total
+        const exceeded = sum > cage.total
+        if (wrongWhenFull || exceeded) {
+          // All filled cells (including self) conflict on their numbers
           for (const { r, c, n } of cellNums) {
             conflicts.push([r, c, n])
           }
@@ -124,7 +221,7 @@ export default class KillerCage implements SolverExtension {
                     y1={s.y1}
                     x2={s.x2}
                     y2={s.y2}
-                    stroke="#333333"
+                    stroke={getCurrentTheme().overlay.cage}
                     strokeWidth={1.2}
                     strokeDasharray={`${dash} ${gap}`}
                   />
@@ -137,7 +234,7 @@ export default class KillerCage implements SolverExtension {
                   fontSize={13}
                   fontFamily={FONT_FAMILY}
                   fontWeight="bold"
-                  fill="#333333"
+                  fill={getCurrentTheme().overlay.cage}
                 >
                   {cage.total}
                 </text>

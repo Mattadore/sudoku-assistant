@@ -3,6 +3,30 @@ import {
   gridViewBox,
   overlayStyle,
 } from './svgHelpers'
+import { getCurrentTheme } from '../themes'
+import type { ConstraintHandler } from '../solver/solverTypes'
+
+export const solverHandler: ConstraintHandler = {
+  cellsOf: (con) => [con.cell, ...con.neighbors],
+  propagate: (cell, digit, con, maxDigit, _board, _domains, _removeBit, intersect) => {
+    if (con.cell === cell) {
+      for (const n of con.neighbors as number[]) {
+        let mask = 0
+        if (con.isMax) { for (let d = 1; d < digit; d++) mask |= 1 << d }
+        else           { for (let d = digit + 1; d <= maxDigit; d++) mask |= 1 << d }
+        if (mask === 0) return false
+        if (!intersect(n, mask)) return false
+      }
+    } else if ((con.neighbors as number[]).includes(cell)) {
+      let mask = 0
+      if (con.isMax) { for (let d = digit + 1; d <= maxDigit; d++) mask |= 1 << d }
+      else           { for (let d = 1; d < digit; d++) mask |= 1 << d }
+      if (mask === 0) return false
+      if (!intersect(con.cell, mask)) return false
+    }
+    return true
+  },
+}
 
 const ORTHO: [number, number][] = [[-1, 0], [1, 0], [0, -1], [0, 1]]
 
@@ -104,8 +128,8 @@ export default class MinMax implements SolverExtension {
             <polygon
               key={`${row},${col}`}
               points={`${x - r},${y - dy} ${x + r},${y - dy} ${x},${y + dy}`}
-              fill="rgba(140, 140, 140, 0.35)"
-              stroke="rgba(100, 100, 100, 0.6)"
+              fill={getCurrentTheme().overlay.minmax}
+              stroke={getCurrentTheme().overlay.line}
               strokeWidth={1.5}
             />
           )

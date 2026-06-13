@@ -19,6 +19,9 @@ interface UIStore {
   inputMode: 'normal' | 'corner' | 'center' | 'color'
   setInputMode: (mode: 'normal' | 'corner' | 'center' | 'color') => void
 
+  themeId: string
+  setThemeId: (id: string) => void
+
   timerElapsed: number
   timerRunning: boolean
   startTimer: () => void
@@ -52,6 +55,12 @@ export const useUIStore = create<UIStore>()((set) => ({
 
   inputMode: 'normal',
   setInputMode: (mode) => set({ inputMode: mode }),
+
+  themeId: 'classic',
+  setThemeId: (id) => {
+    if (typeof localStorage !== 'undefined') localStorage.themeId = id
+    set({ themeId: id })
+  },
 
   timerElapsed: 0,
   timerRunning: false,

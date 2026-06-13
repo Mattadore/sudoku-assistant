@@ -1,5 +1,18 @@
 import { cellCenter, gridViewBox, overlayStyle } from './svgHelpers'
 import { FONT_FAMILY } from '../theme'
+import { getCurrentTheme } from '../themes'
+import type { ConstraintHandler } from '../solver/solverTypes'
+
+export const solverHandler: ConstraintHandler = {
+  cellsOf: (con) => [con.cell0, con.cell1],
+  propagate: (cell, digit, con, maxDigit, _board, _domains, _removeBit, intersect) => {
+    const other = con.cell0 === cell ? con.cell1 : con.cell1 === cell ? con.cell0 : -1
+    if (other === -1) return true
+    const required = con.total - digit
+    if (required < 1 || required > maxDigit) return false
+    return intersect(other, 1 << required)
+  },
+}
 
 type XVData = { pairs: { cells: [BoardIndex, BoardIndex]; value: 'X' | 'V' }[] }
 
@@ -52,8 +65,8 @@ export default class XV implements SolverExtension {
           const r = cellSize * 0.14
           return (
             <g key={i}>
-              <circle cx={mx} cy={my} r={r} fill="white" />
-              <text x={mx} y={my} textAnchor="middle" dominantBaseline="central" fontSize={20} fontFamily={FONT_FAMILY} fontWeight="bold" fill="#111">
+              <circle cx={mx} cy={my} r={r} fill={getCurrentTheme().overlay.dotBackground} />
+              <text x={mx} y={my} textAnchor="middle" dominantBaseline="central" fontSize={20} fontFamily={FONT_FAMILY} fontWeight="bold" fill={getCurrentTheme().overlay.dotText}>
                 {pair.value}
               </text>
             </g>

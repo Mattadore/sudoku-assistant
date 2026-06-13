@@ -108,6 +108,52 @@ export function loadPuzzle(puzzle: PuzzleDefinition) {
 const formats: PuzzleFormat[] = [ctcFormat, fpuzzlesFormat]
 
 /**
+ * Resolve a SudokuPad short link to its raw puzzle payload.
+ *
+ * SudokuPad short URLs — e.g. `https://sudokupad.app/2yqoz2693w` or
+ * `https://sudokupad.app/sudoku/<id>` — don't carry inline data; the payload
+ * lives on SudokuPad's server keyed by id. Inline data URLs (`…/ctc<data>`,
+ * `…/scl<data>`, `…/fpuz…`) already contain their payload and are handled by
+ * the normal format importers, so those are skipped here.
+ *
+ * Returns the resolved payload string (an scl…/ctc…/fpuzzles string), or null
+ * if the input is not a SudokuPad short link. Throws if the lookup fails.
+ */
+async function resolveSudokuPadShortLink(input: string): Promise<string | null> {
+  const s = input.trim()
+
+  if (!/sudokupad\.app\//i.test(s)) return null
+
+  // Inline data URLs carry their own payload — not short links.
+  if (/sudokupad\.app\/(ctc|scl|fpuz)/i.test(s)) return null
+
+  const match = s.match(/sudokupad\.app\/(.+)/i)
+  if (!match) return null
+
+  // Strip query/hash, then an optional `sudoku/` path prefix, leaving the id.
+  let id = match[1].split(/[?#]/)[0].replace(/^sudoku\//i, '').replace(/\/+$/, '')
+  if (!id) return null
+
+  // Proxy through our own API route to avoid SudokuPad's CORS restrictions.
+  const res = await fetch(`/api/sudokupad/${encodeURIComponent(id)}`)
+  if (!res.ok) {
+    let detail = ''
+    try {
+      detail = (await res.json())?.error ?? ''
+    } catch {
+      /* non-JSON error body */
+    }
+    throw new Error(
+      detail || `SudokuPad lookup failed (HTTP ${res.status}) for id "${id}"`,
+    )
+  }
+
+  const body = (await res.text()).trim()
+  if (!body) throw new Error(`SudokuPad returned no data for id "${id}"`)
+  return body
+}
+
+/**
  * Register a new puzzle format importer. Registered formats are tried before
  * built-in ones, so third-party formats can take precedence.
  */
@@ -122,12 +168,21 @@ export function registerFormat(format: PuzzleFormat) {
  *
  * Supported inputs:
  *   - f-puzzles.com URL or bare base64 string (LZ-string encoded)
- *   - SudokuPad URL: https://sudokupad.app/ctc<data> or .../scl<data>
+ *   - SudokuPad inline URL: https://sudokupad.app/ctc<data> or .../scl<data>
+ *   - SudokuPad short link: https://sudokupad.app/<id> (resolved via lookup)
  *   - Prefixed CTC string: ctc<data> or scl<data>
  *   - Raw CTC JSON object
+ *
+ * Async because SudokuPad short links require a network lookup to resolve the
+ * id to its puzzle payload.
  */
-export function importPuzzle(input: string): PuzzleDefinition {
-  const s = input.trim()
+export async function importPuzzle(input: string): Promise<PuzzleDefinition> {
+  let s = input.trim()
+
+  // SudokuPad short links must be resolved to their payload before decoding.
+  const resolved = await resolveSudokuPadShortLink(s)
+  if (resolved !== null) s = resolved.trim()
+
   const decodeErrors: string[] = []
 
   for (const fmt of formats) {
@@ -154,6 +209,6 @@ export function importPuzzle(input: string): PuzzleDefinition {
 export { convertFPuzzleToPuzzle, decodeFPuzzle }
 
 /** @deprecated Use importPuzzle() instead */
-export function importFPuzzle(input: string): PuzzleDefinition {
+export function importFPuzzle(input: string): Promise<PuzzleDefinition> {
   return importPuzzle(input)
 }

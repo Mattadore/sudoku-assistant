@@ -1,4 +1,29 @@
 import { cellCenter, gridViewBox, overlayStyle } from './svgHelpers'
+import { getCurrentTheme } from '../themes'
+import type { ConstraintHandler } from '../solver/solverTypes'
+
+export const solverHandler: ConstraintHandler = {
+  cellsOf: (con) => [con.line[0], con.line[con.line.length - 1]],
+  propagate: (cell, digit, con, _maxDigit, board, _domains, _removeBit, intersect) => {
+    const line = con.line as number[]
+    const endA = line[0], endB = line[line.length - 1]
+    const isEndA = endA === cell, isEndB = endB === cell
+    if (!isEndA && !isEndB) return true
+    const valA = isEndA ? digit : board[endA]
+    const valB = isEndB ? digit : board[endB]
+    if (valA > 0 && valB > 0) {
+      const lo = Math.min(valA, valB), hi = Math.max(valA, valB)
+      if (lo === hi) return false
+      let mask = 0
+      for (let d = lo + 1; d < hi; d++) mask |= 1 << d
+      if (mask === 0) return false
+      for (let i = 1; i < line.length - 1; i++) {
+        if (!intersect(line[i], mask)) return false
+      }
+    }
+    return true
+  },
+}
 
 type LineData = { lines: BoardIndex[][] }
 
@@ -70,9 +95,9 @@ export default class BetweenLine implements SolverExtension {
           const end = cc(line[line.length - 1][0], line[line.length - 1][1])
           return (
             <g key={i}>
-              <polyline points={points} fill="none" stroke="#AAAAAA" strokeWidth={lineWidth} strokeLinecap="round" strokeLinejoin="round" opacity={0.5} />
-              <circle cx={start.x} cy={start.y} r={dotRadius} fill="none" stroke="#AAAAAA" strokeWidth={2} opacity={0.5} />
-              <circle cx={end.x} cy={end.y} r={dotRadius} fill="none" stroke="#AAAAAA" strokeWidth={2} opacity={0.5} />
+              <polyline points={points} fill="none" stroke={getCurrentTheme().overlay.line} strokeWidth={lineWidth} strokeLinecap="round" strokeLinejoin="round" opacity={0.5} />
+              <circle cx={start.x} cy={start.y} r={dotRadius} fill="none" stroke={getCurrentTheme().overlay.line} strokeWidth={2} opacity={0.5} />
+              <circle cx={end.x} cy={end.y} r={dotRadius} fill="none" stroke={getCurrentTheme().overlay.line} strokeWidth={2} opacity={0.5} />
             </g>
           )
         })}
